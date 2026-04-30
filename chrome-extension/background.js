@@ -74,23 +74,41 @@ async function checkAndTrigger(host, totalSeconds) {
   const { breaks } = await chrome.storage.local.get('breaks');
   if (breaks?.[host] && breaks[host] > Date.now()) return;
 
-  // Send to ALL tabs (not just active) so page already open gets it
+  const payload = {
+    type: 'show_overlay',
+    host,
+    breakMinutes: cfg.breakMinutes,
+    photoB64:     cfg.photoB64  ?? null,
+    message:      cfg.message,
+    hasVideo:     cfg.hasVideo  ?? false,
+    hasBgm:       cfg.hasBgm    ?? false,
+  };
+
+  // Send to ALL tracked tabs; re-inject if content script is orphaned
   const tabs = await chrome.tabs.query({});
   for (const tab of tabs) {
-    if (!tab.url || tab.url.startsWith('chrome://')) continue;
+    const url = tab.url ?? '';
+    if (!url.startsWith('http://') && !url.startsWith('https://')) continue;
     try {
-      const tabHost = new URL(tab.url).hostname;
+      const tabHost = new URL(url).hostname;
       if (!matchesSite(tabHost, cfg.trackedSites)) continue;
-      await chrome.tabs.sendMessage(tab.id, {
-        type: 'show_overlay',
-        host,
-        breakMinutes: cfg.breakMinutes,
-        photoB64:     cfg.photoB64  ?? null,
-        message:      cfg.message,
-        hasVideo:     cfg.hasVideo  ?? false,
-        hasBgm:       cfg.hasBgm    ?? false,
-      });
-    } catch (_) { /* tab not ready */ }
+      try {
+        await chrome.tabs.sendMessage(tab.id, payload);
+      } catch (_) {
+        // Content script orphaned after extension reload — re-inject
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: () => { window.__gfgk_loaded = false; },
+          });
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['content.js'],
+          });
+          await chrome.tabs.sendMessage(tab.id, payload);
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 }
 
@@ -154,33 +172,35 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     // Debug: force-show overlay on active tab immediately
     if (msg.type === 'test_overlay') {
       const cfg = await getCfg();
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tab) {
+      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      const url = tab?.url ?? '';
+      if (tab && (url.startsWith('http://') || url.startsWith('https://'))) {
+        const payload = {
+          type: 'show_overlay',
+          host: 'test',
+          breakMinutes: cfg.breakMinutes,
+          photoB64:     cfg.photoB64 ?? null,
+          message:      cfg.message,
+          hasVideo:     cfg.hasVideo ?? false,
+          hasBgm:       cfg.hasBgm   ?? false,
+        };
         try {
-          await chrome.tabs.sendMessage(tab.id, {
-            type: 'show_overlay',
-            host: 'test',
-            breakMinutes: cfg.breakMinutes,
-            photoB64:     cfg.photoB64 ?? null,
-            message:      cfg.message,
-            hasVideo:     cfg.hasVideo ?? false,
-            hasBgm:       cfg.hasBgm   ?? false,
-          });
+          await chrome.tabs.sendMessage(tab.id, payload);
         } catch (e) {
-          // Content script not ready — inject it first
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            files: ['db.js', 'content.js'],
-          });
-          await chrome.tabs.sendMessage(tab.id, {
-            type: 'show_overlay',
-            host: 'test',
-            breakMinutes: cfg.breakMinutes,
-            photoB64:     cfg.photoB64 ?? null,
-            message:      cfg.message,
-            hasVideo:     cfg.hasVideo ?? false,
-            hasBgm:       cfg.hasBgm   ?? false,
-          });
+          // Content script orphaned or not ready — reset guard then re-inject
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: () => { window.__gfgk_loaded = false; },
+            });
+          } catch (_) {}
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: ['content.js'],
+            });
+            await chrome.tabs.sendMessage(tab.id, payload);
+          } catch (_) {}
         }
       }
     }

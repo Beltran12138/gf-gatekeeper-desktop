@@ -1,6 +1,6 @@
 /**
  * Girlfriend Gatekeeper — content script
- * Supports: photo, GIF, video (with audio), BGM fallback.
+ * UI: WeChat-style video call (full-screen media, top bar, bottom actions).
  * db.js is loaded before this file (see manifest.json).
  */
 
@@ -11,9 +11,11 @@
 
   let overlayEl = null;
   let countdownInterval = null;
+  let callTimerInterval = null;
   let bgmAudio = null;
   let videoEl  = null;
-  let objectURLs = [];   // revoked on hide
+  let objectURLs = [];
+  let callSecs = 0;
 
   // ── message listener ──────────────────────────────────────────────────────
 
@@ -25,7 +27,7 @@
 
   async function showOverlay({ host, breakMinutes, photoB64, message, hasVideo, hasBgm }) {
     const shadow = createShadowHost();
-    const root   = shadow.shadowRoot;
+    const root = shadow.shadowRoot;
 
     const style = document.createElement('style');
     style.textContent = getStyles();
@@ -36,26 +38,34 @@
     root.appendChild(wrap);
     overlayEl = wrap;
 
-    // Backdrop
-    const backdrop = document.createElement('div');
-    backdrop.className = 'gfgk-backdrop';
-    wrap.appendChild(backdrop);
+    // 1. Full-screen media background
+    const mediaBg = document.createElement('div');
+    mediaBg.className = 'gfgk-media-bg';
+    wrap.appendChild(mediaBg);
+    await loadMedia(mediaBg, photoB64, hasVideo, hasBgm);
 
-    // Media area
-    const photoWrap = document.createElement('div');
-    photoWrap.className = 'gfgk-photo-wrap';
-    wrap.appendChild(photoWrap);
+    // 2. Gradient vignettes
+    const gradTop = document.createElement('div');
+    gradTop.className = 'gfgk-grad-top';
+    wrap.appendChild(gradTop);
+    const gradBot = document.createElement('div');
+    gradBot.className = 'gfgk-grad-bot';
+    wrap.appendChild(gradBot);
 
-    await loadMedia(photoWrap, photoB64, hasVideo, hasBgm);
+    // 3. Top bar (caller info + timer)
+    wrap.appendChild(buildTopBar());
 
-    // Card
-    const card = buildCard(host, breakMinutes, message);
-    wrap.appendChild(card.el);
+    // 4. Message subtitle
+    const msgEl = document.createElement('div');
+    msgEl.className = 'gfgk-subtitle';
+    msgEl.textContent = message ?? '宝贝说：该休息了 ❤️';
+    wrap.appendChild(msgEl);
 
-    // Entrance animation
+    // 5. Bottom action area (countdown + buttons)
+    wrap.appendChild(buildBottomBar(host, breakMinutes));
+
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      photoWrap.classList.add('gfgk-entered');
-      card.el.classList.add('gfgk-card-entered');
+      wrap.classList.add('gfgk-entered');
     }));
 
     document.addEventListener('keydown', onKeydown);
@@ -64,78 +74,100 @@
   // ── media loading ─────────────────────────────────────────────────────────
 
   async function loadMedia(container, photoB64, hasVideo, hasBgm) {
-    // 1. Try video from IndexedDB
-    if (hasVideo) {
-      try {
-        const blob = await mediaLoad('main_media');
-        if (blob) {
-          videoEl = document.createElement('video');
-          videoEl.className = 'gfgk-photo';
-          videoEl.autoplay = true;
-          videoEl.loop = true;
-          videoEl.playsInline = true;
-          // Video carries its own audio — no separate BGM needed
-          const url = URL.createObjectURL(blob);
-          objectURLs.push(url);
-          videoEl.src = url;
-          container.appendChild(videoEl);
-          videoEl.play().catch(() => {});
-          return;  // video loaded, skip photo + BGM
-        }
-      } catch (_) {}
+    // Both popup and content scripts share chrome.storage.local —
+    // data URLs stored there are readable here without cross-origin issues.
+    const { cfg } = await chrome.storage.local.get('cfg').catch(() => ({ cfg: null }));
+
+    if (hasVideo && cfg?.videoDataUrl) {
+      videoEl = document.createElement('video');
+      videoEl.className = 'gfgk-media';
+      videoEl.autoplay = true; videoEl.loop = true; videoEl.playsInline = true;
+      videoEl.src = cfg.videoDataUrl;
+      container.appendChild(videoEl);
+      videoEl.play().catch(() => {});
+      return;
     }
 
-    // 2. Fall back to photo (base64)
-    if (photoB64) {
+    const photo = cfg?.photoB64 ?? photoB64;
+    if (photo) {
       const img = document.createElement('img');
-      img.className = 'gfgk-photo';
-      img.src = photoB64;
+      img.className = 'gfgk-media';
+      img.src = photo;
       container.appendChild(img);
     } else {
-      // 3. Emoji placeholder
       const em = document.createElement('div');
-      em.className = 'gfgk-emoji';
+      em.className = 'gfgk-emoji-bg';
       em.textContent = '❤️';
       container.appendChild(em);
     }
 
-    // 4. BGM (only when no video)
-    if (hasBgm) {
-      try {
-        const blob = await mediaLoad('bgm');
-        if (blob) {
-          bgmAudio = document.createElement('audio');
-          bgmAudio.loop = true;
-          const url = URL.createObjectURL(blob);
-          objectURLs.push(url);
-          bgmAudio.src = url;
-          bgmAudio.play().catch(() => {});
-        }
-      } catch (_) {}
+    if (hasBgm && cfg?.bgmDataUrl) {
+      bgmAudio = document.createElement('audio');
+      bgmAudio.loop = true;
+      bgmAudio.src = cfg.bgmDataUrl;
+      bgmAudio.play().catch(() => {});
     }
   }
 
-  // ── card with countdown ───────────────────────────────────────────────────
+  // ── top bar ───────────────────────────────────────────────────────────────
 
-  function buildCard(host, breakMinutes, message) {
-    const card = document.createElement('div');
-    card.className = 'gfgk-card';
+  function buildTopBar() {
+    const bar = document.createElement('div');
+    bar.className = 'gfgk-top-bar';
 
-    const msgEl = document.createElement('div');
-    msgEl.className = 'gfgk-message';
-    msgEl.textContent = message ?? '宝贝说：该休息了 ❤️';
-    card.appendChild(msgEl);
+    const back = document.createElement('span');
+    back.className = 'gfgk-back-btn';
+    back.textContent = '‹';
+    bar.appendChild(back);
 
-    const subEl = document.createElement('div');
-    subEl.className = 'gfgk-sub';
-    subEl.textContent = `休息 ${breakMinutes} 分钟后继续`;
-    card.appendChild(subEl);
+    const mid = document.createElement('div');
+    mid.className = 'gfgk-top-mid';
+
+    const name = document.createElement('div');
+    name.className = 'gfgk-caller-name';
+    name.textContent = '宝贝';
+    mid.appendChild(name);
+
+    const status = document.createElement('div');
+    status.className = 'gfgk-call-status-txt';
+    status.textContent = '视频通话中';
+    mid.appendChild(status);
+
+    bar.appendChild(mid);
+
+    const timerEl = document.createElement('span');
+    timerEl.className = 'gfgk-call-timer';
+    timerEl.textContent = '00:00';
+    bar.appendChild(timerEl);
+
+    callTimerInterval = setInterval(() => {
+      callSecs++;
+      timerEl.textContent = fmt(callSecs);
+    }, 1000);
+
+    return bar;
+  }
+
+  // ── bottom bar ────────────────────────────────────────────────────────────
+
+  function buildBottomBar(host, breakMinutes) {
+    const bar = document.createElement('div');
+    bar.className = 'gfgk-bottom-bar';
+
+    // Countdown
+    const cdWrap = document.createElement('div');
+    cdWrap.className = 'gfgk-cd-wrap';
+
+    const cdHint = document.createElement('div');
+    cdHint.className = 'gfgk-cd-hint';
+    cdHint.textContent = `休息 ${breakMinutes} 分钟后恢复`;
+    cdWrap.appendChild(cdHint);
 
     let remaining = breakMinutes * 60;
     const cdEl = document.createElement('div');
-    cdEl.className = 'gfgk-countdown';
+    cdEl.className = 'gfgk-cd';
     cdEl.textContent = fmt(remaining);
-    card.appendChild(cdEl);
+    cdWrap.appendChild(cdEl);
 
     countdownInterval = setInterval(() => {
       remaining--;
@@ -143,19 +175,55 @@
       if (remaining <= 0) endBreak(host, breakMinutes);
     }, 1000);
 
+    bar.appendChild(cdWrap);
+
+    // Action buttons
+    const actions = document.createElement('div');
+    actions.className = 'gfgk-actions';
+
+    // Mute button — toggles overlay media + all page audio/video
+    let muted = false;
+    const muteWrap = document.createElement('div');
+    muteWrap.className = 'gfgk-act-wrap';
+    const muteBtn = document.createElement('button');
+    muteBtn.className = 'gfgk-act-btn';
+    muteBtn.textContent = '🎤';
+    const muteLbl = document.createElement('span');
+    muteLbl.className = 'gfgk-act-lbl';
+    muteLbl.textContent = '静音';
+    muteBtn.onclick = () => {
+      muted = !muted;
+      if (videoEl)  videoEl.muted  = muted;
+      if (bgmAudio) bgmAudio.muted = muted;
+      document.querySelectorAll('video, audio').forEach(el => { el.muted = muted; });
+      muteBtn.textContent = muted ? '🔇' : '🎤';
+      muteLbl.textContent = muted ? '已静音' : '静音';
+      muteBtn.style.background = muted ? 'rgba(255,80,80,0.35)' : '';
+    };
+    muteWrap.appendChild(muteBtn);
+    muteWrap.appendChild(muteLbl);
+    actions.appendChild(muteWrap);
+
+    actions.appendChild(makeActionBtn('📵', '去休息',  'gfgk-act-btn gfgk-end-btn', () => endBreak(host, breakMinutes)));
+    actions.appendChild(makeActionBtn('✕',  '紧急退出','gfgk-act-btn gfgk-esc-btn', removeOverlay));
+
+    bar.appendChild(actions);
+    return bar;
+  }
+
+  function makeActionBtn(icon, label, cls, handler) {
+    const wrap = document.createElement('div');
+    wrap.className = 'gfgk-act-wrap';
     const btn = document.createElement('button');
-    btn.className = 'gfgk-btn';
-    btn.textContent = '好的，我去休息了  ❤️';
-    btn.onclick = () => endBreak(host, breakMinutes);
-    card.appendChild(btn);
-
-    const esc = document.createElement('button');
-    esc.className = 'gfgk-esc';
-    esc.textContent = '紧急退出 [ESC]';
-    esc.onclick = removeOverlay;
-    card.appendChild(esc);
-
-    return { el: card };
+    btn.className = cls;
+    btn.textContent = icon;
+    if (handler) btn.onclick = handler;
+    wrap.appendChild(btn);
+    const lbl = document.createElement('span');
+    lbl.className = 'gfgk-act-lbl';
+    lbl.textContent = label;
+    wrap.appendChild(lbl);
+    return wrap;
   }
 
   // ── helpers ───────────────────────────────────────────────────────────────
@@ -169,11 +237,15 @@
 
   function removeOverlay() {
     clearInterval(countdownInterval);
+    clearInterval(callTimerInterval);
+    callSecs = 0;
     document.removeEventListener('keydown', onKeydown);
     if (bgmAudio) { bgmAudio.pause(); bgmAudio = null; }
     if (videoEl)  { videoEl.pause();  videoEl  = null; }
     objectURLs.forEach(u => URL.revokeObjectURL(u));
     objectURLs = [];
+    // Restore page audio that may have been muted
+    document.querySelectorAll('video, audio').forEach(el => { el.muted = false; });
     const host = document.getElementById('__gfgk_shadow_host__');
     if (host) host.remove();
     overlayEl = null;
@@ -201,103 +273,121 @@
 
   function getStyles() { return `
     .gfgk-wrap {
-      position: fixed; inset: 0;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 22px;
-      font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+      position: fixed; inset: 0; overflow: hidden;
+      font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      opacity: 0; transition: opacity 0.4s ease;
     }
-    .gfgk-backdrop {
-      position: absolute; inset: 0; z-index: 0;
-      background: rgba(6, 2, 14, 0.52);
-      backdrop-filter: blur(20px) brightness(0.35) saturate(0.5);
-      -webkit-backdrop-filter: blur(20px) brightness(0.35) saturate(0.5);
+    .gfgk-wrap.gfgk-entered { opacity: 1; }
+
+    /* ── full-screen media ── */
+    .gfgk-media-bg {
+      position: absolute; inset: 0; background: #060610; overflow: hidden;
+    }
+    .gfgk-media {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+      filter: brightness(0.72) saturate(1.1);
+    }
+    .gfgk-emoji-bg {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 200px;
+      background: radial-gradient(ellipse at 50% 42%, #1a0a2e 0%, #04020d 100%);
     }
 
-    /* Photo / Video — spring entrance */
-    .gfgk-photo-wrap {
-      position: relative; z-index: 1;
-      transform: scale(0.05) perspective(600px) rotateX(40deg);
-      opacity: 0;
-      transition: transform 0.75s cubic-bezier(0.34, 1.56, 0.64, 1),
-                  opacity   0.35s ease;
+    /* ── vignettes ── */
+    .gfgk-grad-top {
+      position: absolute; top: 0; left: 0; right: 0; height: 220px;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.72) 0%, transparent 100%);
+      pointer-events: none; z-index: 1;
     }
-    .gfgk-photo-wrap.gfgk-entered {
-      transform: scale(1) perspective(600px) rotateX(0deg);
-      opacity: 1;
-    }
-    .gfgk-photo {
-      width: 240px; height: 240px; border-radius: 50%;
-      object-fit: cover;
-      border: 3px solid #ff6b9d;
-      box-shadow:
-        0 0 0   6px rgba(255,107,157,0.15),
-        0 0 0  18px rgba(255,107,157,0.07),
-        0 0 50px 10px rgba(196,77,255,0.20),
-        0 24px 60px rgba(0,0,0,0.8);
-      animation: breathe 3.5s ease-in-out infinite;
-    }
-    .gfgk-emoji {
-      font-size: 110px; line-height: 1;
-      filter: drop-shadow(0 0 30px rgba(255,107,157,0.6));
-      animation: breathe 3.5s ease-in-out infinite;
-    }
-    @keyframes breathe {
-      0%, 100% { transform: scale(1); }
-      50%       { transform: scale(1.04); }
+    .gfgk-grad-bot {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 340px;
+      background: linear-gradient(to top, rgba(0,0,0,0.90) 0%, transparent 100%);
+      pointer-events: none; z-index: 1;
     }
 
-    /* Glow rings */
-    .gfgk-photo-wrap::before {
-      content: ''; position: absolute; inset: -18px;
-      border-radius: 50%; border: 2px solid #ff6b9d;
-      opacity: 0.4; animation: pulse 2s ease-in-out infinite;
+    /* ── top bar ── */
+    .gfgk-top-bar {
+      position: absolute; top: 0; left: 0; right: 0; height: 80px;
+      display: flex; align-items: center; padding: 20px 20px 0; gap: 8px;
+      z-index: 10;
     }
-    .gfgk-photo-wrap::after {
-      content: ''; position: absolute; inset: -32px;
-      border-radius: 50%; border: 1px solid #c44dff;
-      opacity: 0.2; animation: pulse 2s ease-in-out 0.6s infinite;
+    .gfgk-back-btn {
+      font-size: 38px; color: rgba(255,255,255,0.9); line-height: 1;
+      cursor: default; flex-shrink: 0;
+      text-shadow: 0 1px 5px rgba(0,0,0,0.5);
     }
-    @keyframes pulse {
-      0%, 100% { transform: scale(1);    opacity: 0.4; }
-      50%       { transform: scale(1.09); opacity: 0.1; }
+    .gfgk-top-mid {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+    }
+    .gfgk-caller-name {
+      font-size: 18px; font-weight: 600; color: #fff;
+      text-shadow: 0 1px 6px rgba(0,0,0,0.55);
+    }
+    .gfgk-call-status-txt {
+      font-size: 12px; color: rgba(255,255,255,0.58); margin-top: 2px;
+    }
+    .gfgk-call-timer {
+      font-size: 14px; color: rgba(255,255,255,0.72); flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.4);
     }
 
-    /* Card */
-    .gfgk-card {
-      position: relative; z-index: 1;
-      background: rgba(14, 14, 22, 0.94);
-      border: 1px solid #1c1c30; border-radius: 16px;
-      padding: 26px 38px 30px;
-      display: flex; flex-direction: column; align-items: center; gap: 10px;
-      min-width: 320px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.7);
-      transform: translateY(28px); opacity: 0;
-      transition: transform 0.55s cubic-bezier(0.34, 1.3, 0.64, 1) 0.18s,
-                  opacity   0.4s ease 0.18s;
+    /* ── message subtitle ── */
+    .gfgk-subtitle {
+      position: absolute; left: 0; right: 0; bottom: 268px;
+      text-align: center; z-index: 10; pointer-events: none;
+      font-size: 18px; font-weight: 500; color: #fff;
+      padding: 0 48px;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.75);
     }
-    .gfgk-card.gfgk-card-entered { transform: translateY(0); opacity: 1; }
 
-    .gfgk-message { font-size: 19px; font-weight: 700; color: #fff; text-align: center; }
-    .gfgk-sub     { font-size: 11px; color: #50506a; }
-    .gfgk-countdown {
-      font-family: 'Consolas', monospace;
-      font-size: 50px; font-weight: 700;
-      color: #fff; letter-spacing: 2px; line-height: 1.1;
+    /* ── bottom bar ── */
+    .gfgk-bottom-bar {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 0 0 38px; gap: 18px; z-index: 10;
     }
-    .gfgk-btn {
-      margin-top: 6px; padding: 12px 30px;
-      background: #c44dff; color: #fff;
-      border: none; border-radius: 10px;
-      font-size: 14px; font-weight: 700; cursor: pointer;
-      transition: background 0.2s, transform 0.15s; font-family: inherit;
+    .gfgk-cd-wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
     }
-    .gfgk-btn:hover  { background: #a020f0; transform: scale(1.03); }
-    .gfgk-btn:active { transform: scale(0.97); }
-    .gfgk-esc {
-      background: none; border: none; color: #2a2a2a;
-      font-size: 11px; cursor: pointer; font-family: inherit;
-      transition: color 0.2s;
+    .gfgk-cd-hint {
+      font-size: 12px; color: rgba(255,255,255,0.45);
     }
-    .gfgk-esc:hover { color: #ff7070; }
+    .gfgk-cd {
+      font-size: 48px; font-weight: 700; color: #fff; line-height: 1;
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 2px 16px rgba(0,0,0,0.55);
+    }
+
+    /* ── action buttons ── */
+    .gfgk-actions {
+      display: flex; align-items: flex-end; gap: 44px;
+    }
+    .gfgk-act-wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 7px;
+    }
+    .gfgk-act-btn {
+      width: 62px; height: 62px; border-radius: 50%;
+      background: rgba(255,255,255,0.16);
+      border: none; cursor: pointer; outline: none;
+      font-size: 26px; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(8px);
+      transition: background 0.18s, transform 0.14s;
+      color: #fff;
+    }
+    .gfgk-act-btn:hover  { background: rgba(255,255,255,0.26); transform: scale(1.06); }
+    .gfgk-act-btn:active { transform: scale(0.95); }
+    .gfgk-end-btn {
+      width: 72px !important; height: 72px !important; font-size: 30px !important;
+      background: #ff3b30 !important;
+      box-shadow: 0 4px 28px rgba(255,59,48,0.6);
+    }
+    .gfgk-end-btn:hover  { background: #ff1a0e !important; }
+    .gfgk-esc-btn { color: rgba(255,255,255,0.65); font-size: 22px !important; }
+    .gfgk-act-lbl {
+      font-size: 11px; color: rgba(255,255,255,0.62); white-space: nowrap;
+    }
   `; }
 })();

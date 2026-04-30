@@ -35,6 +35,7 @@ analytics.db
 assets/*
 !assets/.gitkeep
 !assets/demo.gif
+!assets/demo-chrome.gif
 
 # Virtual env
 .venv/

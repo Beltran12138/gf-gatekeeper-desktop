@@ -5,9 +5,17 @@ const DEFAULT_SITES = [
 ].join('\n');
 
 function fmtBytes(b) {
-  if (b < 1024)       return b + ' B';
-  if (b < 1048576)    return (b / 1024).toFixed(1) + ' KB';
+  if (b < 1024)     return b + ' B';
+  if (b < 1048576)  return (b / 1024).toFixed(1) + ' KB';
   return (b / 1048576).toFixed(1) + ' MB';
+}
+
+function fileToDataUrl(file) {
+  return new Promise(res => {
+    const r = new FileReader();
+    r.onload = ev => res(ev.target.result);
+    r.readAsDataURL(file);
+  });
 }
 
 // ── load saved state ──────────────────────────────────────────────────────────
@@ -20,28 +28,23 @@ async function load() {
   document.getElementById('message').value  = cfg?.message ?? '';
   document.getElementById('sites').value    = (cfg?.trackedSites ?? []).join('\n') || DEFAULT_SITES;
 
-  // Restore media labels from saved meta
-  if (cfg?.mediaMeta) restoreMediaLabel(cfg.mediaMeta);
+  if (cfg?.mediaMeta) restoreMediaLabel(cfg.mediaMeta, cfg);
   if (cfg?.bgmMeta)   restoreBgmLabel(cfg.bgmMeta);
 
   renderStats(timeMap ?? {});
 }
 
-function restoreMediaLabel(meta) {
+function restoreMediaLabel(meta, cfg) {
   document.getElementById('mediaName').textContent = meta.name;
   document.getElementById('mediaSize').textContent = fmtBytes(meta.size);
-  const isVideo = meta.type.startsWith('video/');
-  if (isVideo) {
-    mediaLoad('main_media').then(blob => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const vid = document.getElementById('mediaThumbVid');
-      vid.src = url; vid.classList.add('show');
-      vid.play().catch(() => {});
-    });
-  } else if (meta.photoB64) {
+  const isVideo = meta.type?.startsWith('video/');
+  if (isVideo && cfg?.videoDataUrl) {
+    const vid = document.getElementById('mediaThumbVid');
+    vid.src = cfg.videoDataUrl; vid.classList.add('show');
+    vid.play().catch(() => {});
+  } else if (!isVideo && cfg?.photoB64) {
     const img = document.getElementById('mediaThumbImg');
-    img.src = meta.photoB64; img.classList.add('show');
+    img.src = cfg.photoB64; img.classList.add('show');
   }
 }
 
@@ -74,51 +77,44 @@ document.getElementById('mediaInput').addEventListener('change', async (e) => {
   if (!file) return;
   const isVideo = file.type.startsWith('video/');
 
-  // Store blob in IndexedDB
-  await mediaSave('main_media', file);
+  // Read as data URL — accessible from both popup and content scripts
+  const dataUrl = await fileToDataUrl(file);
 
-  // For photos: also store base64 for quick preview / legacy path
-  let photoB64 = null;
-  if (!isVideo) {
-    photoB64 = await new Promise(res => {
-      const r = new FileReader();
-      r.onload = ev => res(ev.target.result);
-      r.readAsDataURL(file);
-    });
-    const img = document.getElementById('mediaThumbImg');
-    img.src = photoB64; img.classList.add('show');
-    document.getElementById('mediaThumbVid').classList.remove('show');
-  } else {
-    const url = URL.createObjectURL(file);
+  if (isVideo) {
     const vid = document.getElementById('mediaThumbVid');
-    vid.src = url; vid.classList.add('show');
+    vid.src = dataUrl; vid.classList.add('show');
     vid.play().catch(() => {});
     document.getElementById('mediaThumbImg').classList.remove('show');
+  } else {
+    const img = document.getElementById('mediaThumbImg');
+    img.src = dataUrl; img.classList.add('show');
+    document.getElementById('mediaThumbVid').classList.remove('show');
   }
 
   document.getElementById('mediaName').textContent = file.name;
   document.getElementById('mediaSize').textContent = fmtBytes(file.size);
 
-  // Save meta to chrome.storage.local
   const { cfg } = await chrome.storage.local.get('cfg');
   await chrome.storage.local.set({
     cfg: {
       ...(cfg ?? {}),
-      photoB64: isVideo ? null : photoB64,
-      hasVideo: isVideo,
-      mediaMeta: { name: file.name, size: file.size, type: file.type, photoB64: isVideo ? null : photoB64 },
+      hasVideo:     isVideo,
+      videoDataUrl: isVideo ? dataUrl : null,
+      photoB64:     isVideo ? null    : dataUrl,
+      mediaMeta: { name: file.name, size: file.size, type: file.type },
     }
   });
 });
 
 document.getElementById('mediaClear').addEventListener('click', async () => {
-  await mediaDelete('main_media');
   document.getElementById('mediaThumbImg').classList.remove('show');
   document.getElementById('mediaThumbVid').classList.remove('show');
   document.getElementById('mediaName').textContent = '未上传';
   document.getElementById('mediaSize').textContent = '';
   const { cfg } = await chrome.storage.local.get('cfg');
-  await chrome.storage.local.set({ cfg: { ...(cfg ?? {}), photoB64: null, hasVideo: false, mediaMeta: null } });
+  await chrome.storage.local.set({
+    cfg: { ...(cfg ?? {}), photoB64: null, hasVideo: false, videoDataUrl: null, mediaMeta: null }
+  });
 });
 
 // ── BGM upload ────────────────────────────────────────────────────────────────
@@ -127,23 +123,24 @@ document.getElementById('bgmInput').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
 
-  await mediaSave('bgm', file);
+  const dataUrl = await fileToDataUrl(file);
 
   document.getElementById('bgmName').textContent = file.name;
   document.getElementById('bgmSize').textContent = fmtBytes(file.size);
 
   const { cfg } = await chrome.storage.local.get('cfg');
   await chrome.storage.local.set({
-    cfg: { ...(cfg ?? {}), hasBgm: true, bgmMeta: { name: file.name, size: file.size } }
+    cfg: { ...(cfg ?? {}), hasBgm: true, bgmDataUrl: dataUrl, bgmMeta: { name: file.name, size: file.size } }
   });
 });
 
 document.getElementById('bgmClear').addEventListener('click', async () => {
-  await mediaDelete('bgm');
   document.getElementById('bgmName').textContent = '未上传';
   document.getElementById('bgmSize').textContent = '';
   const { cfg } = await chrome.storage.local.get('cfg');
-  await chrome.storage.local.set({ cfg: { ...(cfg ?? {}), hasBgm: false, bgmMeta: null } });
+  await chrome.storage.local.set({
+    cfg: { ...(cfg ?? {}), hasBgm: false, bgmDataUrl: null, bgmMeta: null }
+  });
 });
 
 // ── save settings ─────────────────────────────────────────────────────────────
