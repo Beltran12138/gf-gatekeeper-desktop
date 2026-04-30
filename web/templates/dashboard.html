@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Girlfriend Gatekeeper — 統計面板</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+      background: #111;
+      color: #fff;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    h1 { font-size: 1.4rem; color: #ff6b9d; margin-bottom: 4px; }
+    .sub { color: #555; font-size: 0.85rem; margin-bottom: 24px; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    .card {
+      background: #1c1c1c;
+      border-radius: 10px;
+      padding: 18px 20px;
+      border: 1px solid #252525;
+    }
+    .card .val { font-size: 2rem; font-weight: 700; color: #ff6b9d; }
+    .card .lbl { font-size: 0.8rem; color: #666; margin-top: 4px; }
+
+    .charts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 700px) { .charts { grid-template-columns: 1fr; } }
+
+    .chart-box {
+      background: #1c1c1c;
+      border-radius: 10px;
+      padding: 18px;
+      border: 1px solid #252525;
+    }
+    .chart-box h2 { font-size: 0.9rem; color: #888; margin-bottom: 14px; }
+
+    .empty { color: #444; font-size: 0.85rem; padding: 20px 0; text-align: center; }
+    .refresh {
+      display: inline-block;
+      margin-top: 24px;
+      padding: 8px 20px;
+      background: #ff6b9d;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .refresh:hover { background: #e05585; }
+  </style>
+</head>
+<body>
+  <h1>Girlfriend Gatekeeper</h1>
+  <div class="sub">本週專注統計（最近 7 天）</div>
+
+  <div class="cards" id="cards">
+    <div class="card"><div class="val" id="c-total">—</div><div class="lbl">本週總時間（分鐘）</div></div>
+    <div class="card"><div class="val" id="c-sites">—</div><div class="lbl">追蹤站點數</div></div>
+    <div class="card"><div class="val" id="c-triggers">—</div><div class="lbl">她出現次數</div></div>
+    <div class="card"><div class="val" id="c-today">—</div><div class="lbl">今日時間（分鐘）</div></div>
+  </div>
+
+  <div class="chart-box" style="margin-bottom:20px">
+    <h2>本次 Session（實時）</h2>
+    <div id="currentList"><span class="empty">無活躍站點</span></div>
+  </div>
+
+  <div class="charts">
+    <div class="chart-box">
+      <h2>本週 Top 站點（分鐘）</h2>
+      <canvas id="topChart" height="220"></canvas>
+    </div>
+    <div class="chart-box">
+      <h2>每日總時長趨勢（分鐘）</h2>
+      <canvas id="trendChart" height="220"></canvas>
+    </div>
+  </div>
+
+  <button class="refresh" onclick="loadAll()">重新整理</button>
+  <span style="color:#444;font-size:0.8rem;margin-left:12px">Session 數據每秒更新</span>
+
+  <script>
+    const PINK   = '#ff6b9d';
+    const PINK2  = 'rgba(255,107,157,0.15)';
+    const GRAY   = '#555';
+    const GRID   = '#252525';
+    const FONT   = { color: '#888', size: 11 };
+
+    Chart.defaults.color = '#888';
+    Chart.defaults.borderColor = GRID;
+
+    let topChart, trendChart;
+
+    async function loadAll() {
+      const [top, trend] = await Promise.all([
+        fetch('/api/top').then(r => r.json()),
+        fetch('/api/trend').then(r => r.json()),
+      ]);
+      renderCards(top, trend);
+      renderTop(top);
+      renderTrend(trend);
+    }
+
+    function renderCards(top, trend) {
+      const totalMin = top.reduce((s, d) => s + Math.round(d.total_seconds / 60), 0);
+      const triggers = top.reduce((s, d) => s + d.triggers, 0);
+      const today    = trend.length ? Math.round((trend.at(-1)?.total_seconds ?? 0) / 60) : 0;
+
+      document.getElementById('c-total').textContent    = totalMin;
+      document.getElementById('c-sites').textContent    = top.length;
+      document.getElementById('c-triggers').textContent = triggers;
+      document.getElementById('c-today').textContent    = today;
+    }
+
+    function renderTop(data) {
+      const labels = data.slice(0, 8).map(d => d.keyword);
+      const values = data.slice(0, 8).map(d => Math.round(d.total_seconds / 60));
+
+      if (topChart) topChart.destroy();
+      const ctx = document.getElementById('topChart').getContext('2d');
+
+      if (!labels.length) {
+        ctx.canvas.parentElement.innerHTML += '<p class="empty">暫無數據</p>';
+        return;
+      }
+
+      topChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ data: values, backgroundColor: PINK, borderRadius: 4 }],
+        },
+        options: {
+          indexAxis: 'y',
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { color: GRID }, ticks: FONT },
+            y: { grid: { display: false }, ticks: FONT },
+          },
+        },
+      });
+    }
+
+    function renderTrend(data) {
+      const labels = data.map(d => d.date.slice(5));
+      const values = data.map(d => Math.round(d.total_seconds / 60));
+
+      if (trendChart) trendChart.destroy();
+      const ctx = document.getElementById('trendChart').getContext('2d');
+
+      if (!labels.length) {
+        ctx.canvas.parentElement.innerHTML += '<p class="empty">暫無數據</p>';
+        return;
+      }
+
+      trendChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            borderColor: PINK,
+            backgroundColor: PINK2,
+            fill: true,
+            tension: 0.35,
+            pointRadius: 4,
+            pointBackgroundColor: PINK,
+          }],
+        },
+        options: {
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { color: GRID }, ticks: FONT },
+            y: { grid: { color: GRID }, ticks: FONT, beginAtZero: true },
+          },
+        },
+      });
+    }
+
+    function fmtTime(sec) {
+      const m = Math.floor(sec / 60), s = sec % 60;
+      return m > 0 ? `${m}m ${s}s` : `${s}s`;
+    }
+
+    async function loadCurrent() {
+      const data = await fetch('/api/current').then(r => r.json());
+      const el = document.getElementById('currentList');
+      if (!data.length) {
+        el.innerHTML = '<span class="empty">無活躍站點</span>';
+        return;
+      }
+      el.innerHTML = data.map(d => `
+        <div style="display:flex;justify-content:space-between;align-items:center;
+                    background:#252525;border-radius:6px;padding:8px 14px;margin-bottom:6px">
+          <span style="color:#fff">${d.keyword}${d.on_break ? ' 🛌' : ''}</span>
+          <span style="color:${d.on_break ? '#07C160' : '#ff6b9d'};font-weight:700">
+            ${fmtTime(d.seconds)}
+          </span>
+        </div>`).join('');
+    }
+
+    loadAll();
+    loadCurrent();
+    setInterval(loadCurrent, 2000);  // refresh current session every 2s
+  </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+Pillow>=10.0.0
+pystray>=0.19.0
+pygame>=2.5.0
+flask>=3.0.0
+matplotlib>=3.8.0
+pytest>=8.0.0
+# Optional: video support (MP4/AVI etc.)
+# opencv-python>=4.9.0

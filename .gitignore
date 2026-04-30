@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# PyInstaller build artifacts
+*.spec.bak
+
+# Personal data — never commit
+~/.gf_gatekeeper/
+config.json
+analytics.db
+
+# Media (personal photos/videos — user adds their own)
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+*.mp3
+*.wav
+*.ogg
+
+# Assets placeholder (keep the directory, not binaries)
+assets/*
+!assets/.gitkeep
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temp audio (ffmpeg extraction)
+tmp*.wav
