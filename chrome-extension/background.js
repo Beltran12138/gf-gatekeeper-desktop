@@ -85,8 +85,10 @@ async function checkAndTrigger(host, totalSeconds) {
         type: 'show_overlay',
         host,
         breakMinutes: cfg.breakMinutes,
-        photoB64: cfg.photoB64,
-        message: cfg.message,
+        photoB64:     cfg.photoB64  ?? null,
+        message:      cfg.message,
+        hasVideo:     cfg.hasVideo  ?? false,
+        hasBgm:       cfg.hasBgm    ?? false,
       });
     } catch (_) { /* tab not ready */ }
   }
@@ -159,21 +161,25 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             type: 'show_overlay',
             host: 'test',
             breakMinutes: cfg.breakMinutes,
-            photoB64: cfg.photoB64,
-            message: cfg.message,
+            photoB64:     cfg.photoB64 ?? null,
+            message:      cfg.message,
+            hasVideo:     cfg.hasVideo ?? false,
+            hasBgm:       cfg.hasBgm   ?? false,
           });
         } catch (e) {
           // Content script not ready — inject it first
           await chrome.scripting.executeScript({
             target: { tabId: tab.id },
-            files: ['content.js'],
+            files: ['db.js', 'content.js'],
           });
           await chrome.tabs.sendMessage(tab.id, {
             type: 'show_overlay',
             host: 'test',
             breakMinutes: cfg.breakMinutes,
-            photoB64: cfg.photoB64,
-            message: cfg.message,
+            photoB64:     cfg.photoB64 ?? null,
+            message:      cfg.message,
+            hasVideo:     cfg.hasVideo ?? false,
+            hasBgm:       cfg.hasBgm   ?? false,
           });
         }
       }

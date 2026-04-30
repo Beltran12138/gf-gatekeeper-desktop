@@ -2,155 +2,162 @@
 <html lang="zh-Hans">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Girlfriend Gatekeeper</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      width: 320px;
+      width: 330px;
       font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-      background: #0f0f18;
-      color: #fff;
-      padding: 20px 18px 24px;
+      background: #0f0f18; color: #fff;
+      padding: 18px 16px 22px;
     }
+    h1 { font-size: 1rem; color: #ff6b9d; margin-bottom: 2px; }
+    .sub { font-size: 0.73rem; color: #444; margin-bottom: 16px; }
 
-    h1 {
-      font-size: 1rem;
-      color: #ff6b9d;
-      margin-bottom: 2px;
-    }
-    .sub { font-size: 0.75rem; color: #444; margin-bottom: 18px; }
-
-    .section { margin-bottom: 16px; }
-    label { display: block; font-size: 0.8rem; color: #888; margin-bottom: 5px; }
+    .section { margin-bottom: 14px; }
+    label.lbl { display: block; font-size: 0.78rem; color: #888; margin-bottom: 5px; }
 
     input[type="number"], input[type="text"], textarea {
-      width: 100%;
-      background: #1a1a28;
-      border: 1px solid #252535;
-      border-radius: 6px;
-      color: #fff;
-      padding: 7px 10px;
-      font-size: 0.88rem;
-      font-family: inherit;
-      outline: none;
+      width: 100%; background: #1a1a28; border: 1px solid #252535;
+      border-radius: 6px; color: #fff; padding: 7px 10px;
+      font-size: 0.85rem; font-family: inherit; outline: none;
     }
-    input[type="number"] { width: 80px; }
-    input[type="number"]:focus, input[type="text"]:focus, textarea:focus {
-      border-color: #ff6b9d;
-    }
+    input[type="number"] { width: 72px; }
+    textarea { height: 52px; resize: vertical; }
+    input:focus, textarea:focus { border-color: #ff6b9d; }
 
-    textarea { height: 60px; resize: vertical; }
+    /* Media card */
+    .media-card {
+      background: #141420; border: 1px solid #1e1e30;
+      border-radius: 8px; padding: 10px 12px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .media-thumb {
+      width: 52px; height: 52px; flex-shrink: 0;
+      border-radius: 8px; object-fit: cover;
+      border: 2px solid #ff6b9d; display: none;
+    }
+    .media-thumb.show { display: block; }
+    .media-thumb-video {
+      width: 52px; height: 52px; flex-shrink: 0;
+      border-radius: 8px; object-fit: cover;
+      border: 2px solid #c44dff; display: none;
+      background: #0a0a1a;
+    }
+    .media-thumb-video.show { display: block; }
 
-    .photo-area {
-      display: flex;
-      align-items: center;
-      gap: 12px;
+    .media-info { flex: 1; min-width: 0; }
+    .media-name { font-size: 0.78rem; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .media-size { font-size: 0.7rem; color: #444; margin-top: 2px; }
+    .media-type-badge {
+      font-size: 0.65rem; padding: 1px 6px; border-radius: 3px;
+      font-weight: 700; margin-left: 4px;
     }
-    .photo-preview {
-      width: 56px; height: 56px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 2px solid #ff6b9d;
-      display: none;
-    }
-    .photo-preview.visible { display: block; }
+    .badge-img   { background: #1a2a1a; color: #4ade80; }
+    .badge-video { background: #1a1a2a; color: #818cf8; }
+    .badge-audio { background: #2a1a1a; color: #fb923c; }
 
     .upload-btn {
-      flex: 1;
-      padding: 8px 0;
-      background: #1a1a28;
-      border: 1px dashed #ff6b9d;
-      border-radius: 8px;
-      color: #ff6b9d;
-      font-size: 0.82rem;
-      cursor: pointer;
-      text-align: center;
-      transition: background 0.2s;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 8px 12px; background: #1a1a28;
+      border: 1px dashed #333; border-radius: 7px;
+      color: #666; font-size: 0.8rem; cursor: pointer;
+      transition: border-color 0.2s, color 0.2s; flex-shrink: 0;
     }
-    .upload-btn:hover { background: #241224; }
+    .upload-btn:hover { border-color: #ff6b9d; color: #ff6b9d; }
+    .upload-btn.audio:hover { border-color: #fb923c; color: #fb923c; }
+    .upload-btn.clear-btn {
+      border-style: solid; border-color: #ff4444;
+      color: #ff4444; padding: 4px 8px; font-size: 0.72rem;
+    }
+    .upload-btn.clear-btn:hover { background: #2a0808; }
 
     .row { display: flex; align-items: center; gap: 8px; }
-    .row span { font-size: 0.82rem; color: #555; }
+    .row span { font-size: 0.8rem; color: #555; }
 
     .stats {
-      background: #141420;
-      border-radius: 8px;
-      padding: 10px 12px;
-      font-size: 0.8rem;
-      color: #666;
-      max-height: 100px;
-      overflow-y: auto;
-      margin-bottom: 4px;
+      background: #141420; border-radius: 7px; padding: 8px 10px;
+      font-size: 0.78rem; color: #666;
+      max-height: 90px; overflow-y: auto;
     }
-    .stat-row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+    .stat-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
     .stat-row .site { color: #888; }
     .stat-row .mins { color: #ff6b9d; font-weight: 700; }
 
-    .btn-row { display: flex; gap: 8px; margin-top: 16px; }
-
+    .btn-row { display: flex; gap: 6px; margin-top: 14px; }
     button.primary {
-      flex: 1;
-      padding: 10px 0;
-      background: #ff6b9d;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 0.9rem;
-      font-weight: 700;
-      cursor: pointer;
-      font-family: inherit;
-      transition: background 0.2s;
+      flex: 1; padding: 9px 0; background: #ff6b9d; color: #fff;
+      border: none; border-radius: 7px; font-size: 0.88rem; font-weight: 700;
+      cursor: pointer; font-family: inherit; transition: background 0.2s;
     }
     button.primary:hover { background: #e05585; }
-
     button.ghost {
-      padding: 10px 14px;
-      background: #1a1a28;
-      color: #888;
-      border: 1px solid #252535;
-      border-radius: 8px;
-      font-size: 0.82rem;
-      cursor: pointer;
-      font-family: inherit;
-      transition: color 0.2s, border-color 0.2s;
+      padding: 9px 11px; background: #1a1a28; color: #888;
+      border: 1px solid #252535; border-radius: 7px;
+      font-size: 0.78rem; cursor: pointer; font-family: inherit;
+      transition: color 0.2s, border-color 0.2s; white-space: nowrap;
     }
     button.ghost:hover { color: #fff; border-color: #555; }
 
-    .saved { color: #07C160; font-size: 0.78rem; opacity: 0; transition: opacity 0.3s; text-align: center; margin-top: 6px; }
+    .saved { color: #07C160; font-size: 0.75rem; opacity: 0; transition: opacity 0.3s; text-align: center; margin-top: 6px; }
     .saved.show { opacity: 1; }
+
+    hr { border: none; border-top: 1px solid #1c1c2e; margin: 12px 0; }
   </style>
 </head>
 <body>
   <h1>💕 Girlfriend Gatekeeper</h1>
-  <div class="sub">刷社交媒体超时，女友照片全屏提醒</div>
+  <div class="sub">刷社交媒体超时，女友照片/视频全屏提醒</div>
 
-  <!-- Photo upload -->
+  <!-- Main media (photo / GIF / video) -->
   <div class="section">
-    <label>女友照片</label>
-    <div class="photo-area">
-      <img class="photo-preview" id="preview" src="" alt="">
-      <label class="upload-btn" for="photoInput">
-        📸 上传照片 / GIF
-        <input type="file" id="photoInput" accept="image/*" style="display:none">
+    <label class="lbl">女友媒体 <span style="color:#555;font-size:0.7rem">照片 / GIF / 视频 MP4</span></label>
+    <div class="media-card" id="mediaCard">
+      <img   class="media-thumb"       id="mediaThumbImg" src="" alt="">
+      <video class="media-thumb-video" id="mediaThumbVid" muted loop playsinline></video>
+      <div class="media-info">
+        <div class="media-name" id="mediaName">未上传</div>
+        <div class="media-size" id="mediaSize"></div>
+      </div>
+      <label class="upload-btn" for="mediaInput" title="上传照片/GIF/视频">
+        📸
+        <input type="file" id="mediaInput" accept="image/*,video/*" style="display:none">
       </label>
+      <label class="upload-btn clear-btn" id="mediaClear" title="清除">✕</label>
     </div>
   </div>
 
+  <!-- BGM -->
+  <div class="section">
+    <label class="lbl">背景音乐 BGM <span style="color:#555;font-size:0.7rem">MP3 / WAV / OGG（视频有音轨时忽略）</span></label>
+    <div class="media-card" id="bgmCard">
+      <div class="media-info">
+        <div class="media-name" id="bgmName">未上传</div>
+        <div class="media-size" id="bgmSize"></div>
+      </div>
+      <label class="upload-btn audio" for="bgmInput" title="上传背景音乐">
+        🎵
+        <input type="file" id="bgmInput" accept="audio/*" style="display:none">
+      </label>
+      <label class="upload-btn clear-btn" id="bgmClear" title="清除">✕</label>
+    </div>
+  </div>
+
+  <hr>
+
   <!-- Message -->
   <div class="section">
-    <label>提示消息</label>
+    <label class="lbl">提示消息</label>
     <textarea id="message" placeholder="宝贝说：该休息了 ❤️"></textarea>
   </div>
 
-  <!-- Time settings -->
+  <!-- Time -->
   <div class="section">
-    <label>时间设置</label>
+    <label class="lbl">时间设置</label>
     <div class="row">
-      <span>时间上限</span>
+      <span>上限</span>
       <input type="number" id="limitMin" min="1" max="180" value="15">
-      <span>分钟</span>
-      <span style="margin-left:8px">休息</span>
+      <span>分钟 &nbsp; 休息</span>
       <input type="number" id="breakMin" min="1" max="60" value="5">
       <span>分钟</span>
     </div>
@@ -158,25 +165,24 @@
 
   <!-- Tracked sites -->
   <div class="section">
-    <label>追踪站点（每行一个域名）</label>
-    <textarea id="sites" style="height:80px" placeholder="bilibili.com&#10;youtube.com&#10;tiktok.com"></textarea>
+    <label class="lbl">追踪站点（每行一个域名）</label>
+    <textarea id="sites" style="height:72px"></textarea>
   </div>
 
-  <!-- Today's stats -->
+  <!-- Stats -->
   <div class="section">
-    <label>今日使用统计</label>
-    <div class="stats" id="stats">
-      <span style="color:#333">暂无数据</span>
-    </div>
+    <label class="lbl">今日统计</label>
+    <div class="stats" id="stats"><span style="color:#333">暂无数据</span></div>
   </div>
 
   <div class="btn-row">
-    <button class="ghost" id="resetBtn">重置计时</button>
-    <button class="ghost" id="testBtn">🧪 测试弹窗</button>
-    <button class="primary" id="saveBtn">保存</button>
+    <button class="ghost" id="resetBtn">重置</button>
+    <button class="ghost" id="testBtn">🧪 测试</button>
+    <button class="primary" id="saveBtn">保存设置</button>
   </div>
   <div class="saved" id="savedMsg">✓ 已保存</div>
 
+  <script src="db.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
