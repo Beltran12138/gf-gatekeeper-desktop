@@ -220,8 +220,4 @@ MIT © 2025
 
 <div align="center">
 
-**If this made you smile (or guiltily minimize a tab) ⭐ starring takes 2 seconds**
-
-*Built with Win32 APIs and an embarrassing amount of time on social media.*
-
 </div>
