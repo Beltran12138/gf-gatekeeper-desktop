@@ -21,9 +21,7 @@
 
 ## 演示
 
-> 📸 录制 GIF 后放在这里（用 [ScreenToGif](https://www.screentogif.com/) 录 overlay 弹出瞬间）
-
-<!-- ![演示](assets/demo.gif) -->
+![演示](assets/demo.gif)
 
 ---
 

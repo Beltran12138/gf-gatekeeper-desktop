@@ -22,17 +22,7 @@
 
 ## Demo
 
-> **📸 Record a GIF and drop it here — this is the most important step.**
-> Use [ScreenToGif](https://www.screentogif.com/) or [ShareX](https://getsharex.com/). Trigger the overlay and capture the 3D pop-in. Export ≤ 5 MB, place at `assets/demo.gif`, then replace this block.
-
-```
- ╔════════════════════════════════════════════╗
- ║  📸  GIF demo — record and add here       ║
- ║  See "Quick Start" to trigger the overlay ║
- ╚════════════════════════════════════════════╝
-```
-
-<!-- ![demo](assets/demo.gif) -->
+![demo](assets/demo.gif)
 
 ---
 

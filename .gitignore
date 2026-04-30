@@ -31,9 +31,10 @@ analytics.db
 *.wav
 *.ogg
 
-# Assets placeholder (keep the directory, not binaries)
+# Assets: keep demo GIF, ignore user media
 assets/*
 !assets/.gitkeep
+!assets/demo.gif
 
 # Virtual env
 .venv/

@@ -87,6 +87,7 @@ class MediaItem:
         self.frame_idx  = 0
         self.is_animated = False
         self.audio_path: str | None = None   # extracted video audio (WAV)
+        self.frame_delay_ms: int = 113       # ms between frames in _do_animate
         ext = os.path.splitext(path)[1].lower()
         try:
             if ext == '.gif':
@@ -135,7 +136,10 @@ class MediaItem:
     def _load_video(self, path, size, circle):
         cap = _cv2.VideoCapture(path)
         total = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT)) or 1
-        step = max(1, total // 120)
+        fps   = cap.get(_cv2.CAP_PROP_FPS) or 30.0
+        step  = max(1, total // 120)
+        # Playback delay: each stored frame represents `step` original frames
+        self.frame_delay_ms = max(20, int(step * 1000 / fps))
         i = 0
         while True:
             ok, frame = cap.read()
@@ -384,8 +388,7 @@ class GatekeeperOverlay:
             return
         item = self.media_items[self.media_idx]
         self._show_frame(item.next_frame())
-        delay = 42 if item.is_animated else 113
-        self._anim_job = self.win.after(delay, self._do_animate)
+        self._anim_job = self.win.after(item.frame_delay_ms, self._do_animate)
 
     def _show_frame(self, pil_img: Image.Image | None, y_off: int = 0):
         if pil_img is None or not self.win:
