@@ -21,7 +21,13 @@
 
 ## 演示
 
+### 🖥️ 桌面应用（Windows）
+
 ![演示](assets/demo.gif)
+
+### 🌐 Chrome 扩展
+
+![chrome演示](assets/demo-chrome.gif)
 
 ---
 
@@ -40,6 +46,8 @@
 
 ## 功能特点
 
+**桌面应用（Windows）**
+
 | 功能 | 实现方式 |
 |------|---------|
 | 🎯 **零开销监控** | `SetWinEventHook` Win32 事件 API，无轮询 |
@@ -50,6 +58,17 @@
 | 📊 **统计面板** | 嵌入式 Flask + SQLite + Chart.js，实时 + 7 天历史 |
 | 📦 **单文件 .exe** | PyInstaller 打包，用户无需安装 Python |
 | ✅ **测试覆盖** | 14 个 pytest 用例，tracker 逻辑 + SQLite 层 |
+
+**Chrome 扩展（全平台）**
+
+| 功能 | 实现方式 |
+|------|---------|
+| 📱 **微信视频通话 UI** | 全屏媒体 + 渐变晕影 + 顶栏 + 操作行 · Shadow DOM 隔离 |
+| 🎬 **视频 / 照片 / GIF** | 以 data URL 存入 `chrome.storage.local`，popup 与 content script 共享访问 |
+| 🎵 **背景音乐** | 独立上传；视频自带音轨时自动忽略 BGM |
+| 🔇 **静音切换** | 同时静音覆盖层媒体与页面所有 `<video>/<audio>`，关闭时自动恢复 |
+| ⏱️ **MV3 安全计时** | `chrome.storage.session` 保活 service worker 状态 · `chrome.alarms` 1 分钟 tick |
+| 🔄 **自动重注入** | 扩展更新后孤化的 content script 被自动检测并替换 |
 
 ---
 
@@ -75,6 +94,15 @@ python main.py
 4. 点击 **面板** → 统计面板在 `http://localhost:7878`
 
 > 要求：Windows 10/11 · Python 3.11+
+
+### Chrome 扩展
+
+1. 打开 `chrome://extensions` → 开启**开发者模式**
+2. 点击**加载已解压的扩展程序** → 选择 `chrome-extension/` 文件夹
+3. 点击扩展图标 → 上传女友照片 / GIF / 视频
+4. 设置时间上限 → **保存** → 正常浏览社交媒体即可
+
+> 支持任何操作系统上的 Chrome，无需安装 Python
 
 ---
 

@@ -22,7 +22,13 @@
 
 ## Demo
 
+### 🖥️ Desktop App (Windows)
+
 ![demo](assets/demo.gif)
+
+### 🌐 Chrome Extension
+
+![demo-chrome](assets/demo-chrome.gif)
 
 ---
 
@@ -41,6 +47,8 @@ Inspired by [catgatekeeper.org](https://www.catgatekeeper.org/) — built for pe
 
 ## Features
 
+**Desktop App (Windows)**
+
 | Feature | Implementation |
 |---------|---------------|
 | 🎯 **Zero-overhead monitoring** | `SetWinEventHook` Win32 event API — fires on focus change, no polling |
@@ -51,6 +59,17 @@ Inspired by [catgatekeeper.org](https://www.catgatekeeper.org/) — built for pe
 | 📊 **Analytics dashboard** | Embedded Flask + SQLite + Chart.js · real-time + 7-day history |
 | 📦 **Portable .exe** | PyInstaller single-file — no Python required for end users |
 | ✅ **Tested** | 14 pytest cases — tracker logic + SQLite layer |
+
+**Chrome Extension (cross-platform)**
+
+| Feature | Implementation |
+|---------|---------------|
+| 📱 **WeChat video-call UI** | Full-screen media + gradient vignette + top bar + action row · Shadow DOM isolation |
+| 🎬 **Video / Photo / GIF** | Stored as data URL in `chrome.storage.local` · accessible from popup & content script |
+| 🎵 **BGM** | Separate audio upload; suppressed when video has its own audio track |
+| 🔇 **Mute toggle** | Mutes overlay media + all page `<video>/<audio>` elements; restores on dismiss |
+| ⏱️ **MV3-safe timer** | `chrome.storage.session` survives service-worker sleep · `chrome.alarms` 1-min tick |
+| 🔄 **Auto re-inject** | Orphaned content scripts after extension update are detected and replaced automatically |
 
 ---
 
@@ -76,6 +95,15 @@ python main.py
 4. Open **面板** → analytics at `http://localhost:7878`
 
 > Requires Windows 10/11 · Python 3.11+
+
+### Chrome Extension
+
+1. Open `chrome://extensions` → enable **Developer mode**
+2. Click **Load unpacked** → select the `chrome-extension/` folder
+3. Click the extension icon → upload girlfriend's photo / GIF / video
+4. Set time limit → **Save** → browse social media as usual
+
+> Works on any OS with Chrome · no Python required
 
 ---
 
