@@ -250,28 +250,41 @@ class GatekeeperOverlay:
     # ── background: blurred screenshot ───────────────────────────────────────
 
     def _capture_blurred_bg(self, sw: int, sh: int) -> None:
-        """Grab current screen, blur heavily, darken — used as overlay background."""
+        """Grab current screen, blur, darken — used as overlay background."""
         try:
-            from PIL import ImageGrab, ImageFilter, ImageEnhance
+            from PIL import ImageGrab, ImageFilter, ImageEnhance, ImageDraw as _ID
+            import numpy as _np
             img = ImageGrab.grab(bbox=(0, 0, sw, sh))
             img = img.resize((sw, sh), Image.LANCZOS)
-            img = img.filter(ImageFilter.GaussianBlur(radius=28))
-            img = ImageEnhance.Brightness(img).enhance(0.22)
+            img = img.filter(ImageFilter.GaussianBlur(radius=30))
+            img = ImageEnhance.Brightness(img).enhance(0.32)
+            # Radial vignette via PIL: darken edges, keep centre brighter
+            vig = Image.new('L', (sw, sh), 0)
+            _vd = _ID.Draw(vig)
+            # 5 concentric ellipses white→black from centre outward
+            steps = 8
+            for i in range(steps):
+                frac = i / steps
+                alpha = int(220 * frac ** 1.6)
+                rx = int(sw * 0.55 * frac)
+                ry = int(sh * 0.55 * frac)
+                cx2, cy2 = sw // 2, sh // 2
+                _vd.ellipse([cx2 - rx, cy2 - ry, cx2 + rx, cy2 + ry],
+                            fill=alpha)
+            # Invert: we want DARK at edges
+            vig_inv = Image.eval(vig, lambda x: 255 - x)
+            dark = Image.new('RGB', (sw, sh), (0, 0, 8))
+            img = Image.composite(dark, img, vig_inv)
             self._bg_tk = ImageTk.PhotoImage(img.convert('RGB'))
         except Exception:
             self._bg_tk = None
 
     def _draw_bg(self, sw: int, sh: int) -> None:
-        c, cx, cy = self.canvas, self.cx, self.cy
+        c = self.canvas
         if self._bg_tk:
             c.create_image(0, 0, image=self._bg_tk, anchor='nw')
         else:
             c.create_rectangle(0, 0, sw, sh, fill=BG, outline='')
-        # Dark vignette ovals — concentrate attention on centre
-        for r, col in [(560, '#110818'), (460, '#0e0612'),
-                       (340, '#0c050f'), (220, '#0b030e')]:
-            c.create_oval(cx - r, cy - r - 60, cx + r, cy + r + 60,
-                          fill=col, outline='')
 
     # ── glow rings ────────────────────────────────────────────────────────────
 

@@ -165,9 +165,9 @@
 
       .gfgk-backdrop {
         position: absolute; inset: 0;
-        background: rgba(8, 4, 18, 0.82);
-        backdrop-filter: blur(24px) brightness(0.4) saturate(0.6);
-        -webkit-backdrop-filter: blur(24px) brightness(0.4) saturate(0.6);
+        background: rgba(6, 2, 14, 0.52);
+        backdrop-filter: blur(20px) brightness(0.35) saturate(0.5);
+        -webkit-backdrop-filter: blur(20px) brightness(0.35) saturate(0.5);
         z-index: 0;
       }
 
