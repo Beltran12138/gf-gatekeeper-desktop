@@ -201,9 +201,17 @@ class GatekeeperOverlay:
         # Progress arc
         self._arc_id = None
 
+        # Blurred screenshot background
+        self._bg_tk = None
+
     # ── public ───────────────────────────────────────────────────────────────
 
     def show(self):
+        # Screenshot BEFORE window appears — captures what user was browsing
+        sw = self.parent.winfo_screenwidth()
+        sh = self.parent.winfo_screenheight()
+        self._capture_blurred_bg(sw, sh)
+
         self.win = tk.Toplevel(self.parent)
         self.win.title('')
         self.win.configure(bg=BG)
@@ -212,8 +220,6 @@ class GatekeeperOverlay:
         self.win.overrideredirect(True)
         self.win.focus_force()
 
-        sw = self.win.winfo_screenwidth()
-        sh = self.win.winfo_screenheight()
         self.cx, self.cy = sw // 2, sh // 2
         self.photo_cy = self.cy - 120
 
@@ -224,7 +230,7 @@ class GatekeeperOverlay:
         self.win.bind('<Escape>', lambda _e: self._emergency())
         self.canvas.bind('<Button-1>', self._click)
 
-        self._draw_spotlight(sw, sh)
+        self._draw_bg(sw, sh)
         self._draw_chrome(sw, sh)
         self._draw_glow_rings()
         threading.Thread(target=self._load_media, daemon=True).start()
@@ -241,10 +247,27 @@ class GatekeeperOverlay:
             self.win.destroy()
             self.win = None
 
-    # ── background: spotlight ─────────────────────────────────────────────────
+    # ── background: blurred screenshot ───────────────────────────────────────
 
-    def _draw_spotlight(self, sw, sh):
+    def _capture_blurred_bg(self, sw: int, sh: int) -> None:
+        """Grab current screen, blur heavily, darken — used as overlay background."""
+        try:
+            from PIL import ImageGrab, ImageFilter, ImageEnhance
+            img = ImageGrab.grab(bbox=(0, 0, sw, sh))
+            img = img.resize((sw, sh), Image.LANCZOS)
+            img = img.filter(ImageFilter.GaussianBlur(radius=28))
+            img = ImageEnhance.Brightness(img).enhance(0.22)
+            self._bg_tk = ImageTk.PhotoImage(img.convert('RGB'))
+        except Exception:
+            self._bg_tk = None
+
+    def _draw_bg(self, sw: int, sh: int) -> None:
         c, cx, cy = self.canvas, self.cx, self.cy
+        if self._bg_tk:
+            c.create_image(0, 0, image=self._bg_tk, anchor='nw')
+        else:
+            c.create_rectangle(0, 0, sw, sh, fill=BG, outline='')
+        # Dark vignette ovals — concentrate attention on centre
         for r, col in [(560, '#110818'), (460, '#0e0612'),
                        (340, '#0c050f'), (220, '#0b030e')]:
             c.create_oval(cx - r, cy - r - 60, cx + r, cy + r + 60,
