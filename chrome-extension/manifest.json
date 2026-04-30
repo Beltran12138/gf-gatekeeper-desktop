@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "刷社交媒体超时，女友照片全屏提醒你休息。Girlfriend appears when you doom-scroll too long.",
 
-  "permissions": ["storage", "alarms", "tabs", "activeTab"],
+  "permissions": ["storage", "alarms", "tabs", "activeTab", "scripting"],
   "host_permissions": ["<all_urls>"],
 
   "background": {

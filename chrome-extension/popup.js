@@ -82,4 +82,10 @@ document.getElementById('resetBtn').addEventListener('click', async () => {
   renderStats({});
 });
 
+// Test overlay immediately
+document.getElementById('testBtn').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ type: 'test_overlay' });
+  window.close();
+});
+
 load();
