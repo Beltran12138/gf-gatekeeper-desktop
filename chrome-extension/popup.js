@@ -59,21 +59,25 @@ async function load() {
   document.getElementById('message').value    = cfg?.message ?? '';
   document.getElementById('sites').value      = (cfg?.trackedSites ?? []).join('\n') || DEFAULT_SITES;
 
-  if (cfg?.mediaMeta) restoreMediaLabel(cfg.mediaMeta, cfg);
+  if (cfg?.mediaMeta) await restoreMediaLabel(cfg.mediaMeta, cfg);
   if (cfg?.bgmMeta)   restoreBgmLabel(cfg.bgmMeta);
 
   renderStats(timeMap);
 }
 
-function restoreMediaLabel(meta, cfg) {
+async function restoreMediaLabel(meta, cfg) {
   document.getElementById('mediaName').textContent = meta.name;
   document.getElementById('mediaSize').textContent = fmtBytes(meta.size);
   const isVideo = meta.type?.startsWith('video/');
-  if (isVideo && cfg?.videoDataUrl) {
-    const vid = document.getElementById('mediaThumbVid');
-    vid.src = cfg.videoDataUrl; vid.classList.add('show');
-    vid.play().catch(() => {});
-  } else if (!isVideo && cfg?.photoB64) {
+  if (isVideo) {
+    // Video stored under separate key to keep cfg small
+    const { gfgk_videoUrl } = await chrome.storage.local.get('gfgk_videoUrl');
+    if (gfgk_videoUrl) {
+      const vid = document.getElementById('mediaThumbVid');
+      vid.src = gfgk_videoUrl; vid.classList.add('show');
+      vid.play().catch(() => {});
+    }
+  } else if (cfg?.photoB64) {
     const img = document.getElementById('mediaThumbImg');
     img.src = cfg.photoB64; img.classList.add('show');
   }
@@ -128,13 +132,18 @@ document.getElementById('mediaInput').addEventListener('change', async (e) => {
   const isAnime = !isVideo && await hasAlphaChannel(dataUrl);
 
   const { cfg } = await chrome.storage.local.get('cfg');
+  // Store video under a separate key to keep cfg small and readable
+  if (isVideo) {
+    await chrome.storage.local.set({ gfgk_videoUrl: dataUrl });
+  } else {
+    await chrome.storage.local.remove('gfgk_videoUrl');
+  }
   await chrome.storage.local.set({
     cfg: {
       ...(cfg ?? {}),
-      hasVideo:     isVideo,
-      animeMode:    isAnime,
-      videoDataUrl: isVideo ? dataUrl : null,
-      photoB64:     isVideo ? null    : dataUrl,
+      hasVideo:  isVideo,
+      animeMode: isAnime,
+      photoB64:  isVideo ? null : dataUrl,
       mediaMeta: { name: file.name, size: file.size, type: file.type },
     }
   });
@@ -149,9 +158,10 @@ document.getElementById('mediaClear').addEventListener('click', async () => {
   document.getElementById('mediaThumbVid').classList.remove('show');
   document.getElementById('mediaName').textContent = '未上传';
   document.getElementById('mediaSize').textContent = '';
+  await chrome.storage.local.remove('gfgk_videoUrl');
   const { cfg } = await chrome.storage.local.get('cfg');
   await chrome.storage.local.set({
-    cfg: { ...(cfg ?? {}), photoB64: null, hasVideo: false, videoDataUrl: null, mediaMeta: null }
+    cfg: { ...(cfg ?? {}), photoB64: null, hasVideo: false, mediaMeta: null }
   });
 });
 
@@ -166,18 +176,21 @@ document.getElementById('bgmInput').addEventListener('change', async (e) => {
   document.getElementById('bgmName').textContent = file.name;
   document.getElementById('bgmSize').textContent = fmtBytes(file.size);
 
+  // BGM stored under a separate key to keep cfg small
+  await chrome.storage.local.set({ gfgk_bgmUrl: dataUrl });
   const { cfg } = await chrome.storage.local.get('cfg');
   await chrome.storage.local.set({
-    cfg: { ...(cfg ?? {}), hasBgm: true, bgmDataUrl: dataUrl, bgmMeta: { name: file.name, size: file.size } }
+    cfg: { ...(cfg ?? {}), hasBgm: true, bgmMeta: { name: file.name, size: file.size } }
   });
 });
 
 document.getElementById('bgmClear').addEventListener('click', async () => {
   document.getElementById('bgmName').textContent = '未上传';
   document.getElementById('bgmSize').textContent = '';
+  await chrome.storage.local.remove('gfgk_bgmUrl');
   const { cfg } = await chrome.storage.local.get('cfg');
   await chrome.storage.local.set({
-    cfg: { ...(cfg ?? {}), hasBgm: false, bgmDataUrl: null, bgmMeta: null }
+    cfg: { ...(cfg ?? {}), hasBgm: false, bgmMeta: null }
   });
 });
 

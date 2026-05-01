@@ -53,6 +53,7 @@
     if (overlayEl) return;
     overlayEl = true; // sentinel: block re-entry during async gap before wrap is assigned
 
+    try {
     const { cfg } = await chrome.storage.local.get('cfg').catch(() => ({ cfg: null }));
     const photo = cfg?.photoB64 ?? photoB64;
     const effectiveAnime = !hasVideo && (animeMode || await detectAlpha(photo));
@@ -81,6 +82,9 @@
       wrap.classList.add('gfgk-entered');
     }));
     document.addEventListener('keydown', onKeydown);
+    } catch (_) {
+      removeOverlay(); // clean up sentinel on any build error
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -124,7 +128,7 @@
     overlay.className = 'gfgk-photo-overlay';
     wrap.appendChild(overlay);
 
-    if (hasBgm) await loadBgmOnly(cfg);
+    if (hasBgm) await loadBgmOnly();
 
     // Center content
     const center = document.createElement('div');
@@ -241,7 +245,7 @@
     bg.className = 'gfgk-anime-bg';
     wrap.appendChild(bg);
 
-    if (hasBgm) await loadBgmOnly(cfg);
+    if (hasBgm) await loadBgmOnly();
 
     const src = photo;
     if (src) {
@@ -301,29 +305,23 @@
   // ── media loading ─────────────────────────────────────────────────────────
 
   async function loadMedia(container, photoB64, hasVideo, hasBgm) {
-    const { cfg } = await chrome.storage.local.get('cfg').catch(() => ({ cfg: null }));
-
-    if (hasVideo && cfg?.videoDataUrl) {
-      videoEl = document.createElement('video');
-      videoEl.className = 'gfgk-media';
-      videoEl.autoplay = true; videoEl.loop = true; videoEl.playsInline = true;
-      videoEl.muted = true; // required for autoplay policy; mute btn can toggle later
-
-      // Convert data URL → Blob URL: avoids Chrome's large-src silent failure
-      try {
-        const blob = await fetch(cfg.videoDataUrl).then(r => r.blob());
-        const objUrl = URL.createObjectURL(blob);
-        objectURLs.push(objUrl);
-        videoEl.src = objUrl;
-      } catch (_) {
-        videoEl.src = cfg.videoDataUrl; // fallback
+    if (hasVideo) {
+      // Video stored under its own key — avoids deserializing large data from cfg
+      const { gfgk_videoUrl } = await chrome.storage.local.get('gfgk_videoUrl').catch(() => ({}));
+      if (gfgk_videoUrl) {
+        videoEl = document.createElement('video');
+        videoEl.className = 'gfgk-media';
+        videoEl.autoplay = true; videoEl.loop = true; videoEl.playsInline = true;
+        videoEl.src = gfgk_videoUrl;
+        videoEl.load();
+        container.appendChild(videoEl);
+        videoEl.play().catch(() => {});
+        if (hasBgm) await loadBgmOnly();
+        return;
       }
-
-      container.appendChild(videoEl);
-      videoEl.play().catch(() => {});
-      return;
     }
 
+    const { cfg } = await chrome.storage.local.get('cfg').catch(() => ({ cfg: null }));
     const photo = cfg?.photoB64 ?? photoB64;
     if (photo) {
       const img = document.createElement('img');
@@ -337,16 +335,16 @@
       container.appendChild(em);
     }
 
-    if (hasBgm) await loadBgmOnly(cfg);
+    if (hasBgm) await loadBgmOnly();
   }
 
-  async function loadBgmOnly(cfg) {
+  async function loadBgmOnly() {
     try {
-      const c = cfg ?? (await chrome.storage.local.get('cfg').catch(() => ({ cfg: null }))).cfg;
-      if (c?.bgmDataUrl) {
+      const { gfgk_bgmUrl } = await chrome.storage.local.get('gfgk_bgmUrl');
+      if (gfgk_bgmUrl) {
         bgmAudio = document.createElement('audio');
         bgmAudio.loop = true;
-        bgmAudio.src = c.bgmDataUrl;
+        bgmAudio.src = gfgk_bgmUrl;
         bgmAudio.play().catch(() => {});
       }
     } catch (_) {}
@@ -423,17 +421,16 @@
     const actions = document.createElement('div');
     actions.className = 'gfgk-actions';
 
-    // Mute button — video starts muted for autoplay; button reflects real state
-    let muted = videoEl ? videoEl.muted : false;
+    // Mute button — default unmuted
+    let muted = false;
     const muteWrap = document.createElement('div');
     muteWrap.className = 'gfgk-act-wrap';
     const muteBtn = document.createElement('button');
     muteBtn.className = 'gfgk-act-btn';
-    muteBtn.textContent = muted ? '🔇' : '🎤';
-    if (muted) muteBtn.style.background = 'rgba(255,80,80,0.35)';
+    muteBtn.textContent = '🎤';
     const muteLbl = document.createElement('span');
     muteLbl.className = 'gfgk-act-lbl';
-    muteLbl.textContent = muted ? '已静音' : '静音';
+    muteLbl.textContent = '静音';
     muteBtn.onclick = () => {
       muted = !muted;
       if (videoEl)  videoEl.muted  = muted;
