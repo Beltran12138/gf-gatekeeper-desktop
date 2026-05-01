@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Girlfriend Gatekeeper</title>
+  <style>
+    body { max-width: 720px; margin: 48px auto; padding: 0 24px; font-family: -apple-system, sans-serif; line-height: 1.7; color: #222; }
+    h1 { color: #c0396b; }
+    h2 { margin-top: 2em; color: #333; }
+    code { background: #f4f4f4; padding: 1px 6px; border-radius: 3px; }
+    .updated { color: #888; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+  <h1>Privacy Policy</h1>
+  <p class="updated">Last updated: May 2026</p>
+
+  <p>
+    Girlfriend Gatekeeper ("the extension") is a Chrome browser extension that helps
+    users limit time spent on social media websites by displaying a full-screen reminder
+    when a configurable time limit is reached.
+  </p>
+
+  <h2>Data We Collect</h2>
+  <p>The extension stores the following data <strong>exclusively on your local device</strong>
+  using Chrome's <code>chrome.storage.local</code> and <code>chrome.storage.session</code> APIs:</p>
+  <ul>
+    <li>Photos, GIF images, or video files you upload as your reminder media</li>
+    <li>Audio files you upload as background music</li>
+    <li>Your configured settings (time limits, break duration, caller name, reminder message, tracked sites list)</li>
+    <li>Per-site time usage counters (reset daily)</li>
+    <li>Active break state and warning flags (session-only, cleared when browser closes)</li>
+  </ul>
+
+  <h2>Data We Do NOT Collect</h2>
+  <ul>
+    <li>No data is ever transmitted to any server or third party</li>
+    <li>No analytics, telemetry, or usage tracking of any kind</li>
+    <li>No personal information is collected, stored remotely, or shared</li>
+    <li>The extension makes zero network requests</li>
+    <li>No third-party SDKs, tracking libraries, or advertising are included</li>
+  </ul>
+
+  <h2>Permissions Used</h2>
+  <ul>
+    <li><strong>storage</strong> — Persist your settings and usage counters locally on your device</li>
+    <li><strong>alarms</strong> — Fire a 1-minute periodic timer to accumulate usage time while the service worker may be sleeping</li>
+    <li><strong>tabs</strong> — Query open tabs to find user-configured social media sites and send the time-limit overlay to all affected tabs simultaneously</li>
+    <li><strong>activeTab</strong> — Show a test overlay on the currently active tab when you click the test button in the popup</li>
+    <li><strong>scripting</strong> — Re-inject the content script into tabs after extension updates when the original script has been orphaned</li>
+    <li><strong>unlimitedStorage</strong> — Store user-uploaded photos and videos (as base64 data URLs, potentially 10–100 MB) without hitting Chrome's default 10 MB quota</li>
+    <li><strong>notifications</strong> — Show a system notification 5 minutes before you reach your time limit, and when a break period ends</li>
+    <li><strong>host_permissions (&lt;all_urls&gt;)</strong> — Users can add any website to their tracked list; the extension must be able to inject reminders on user-defined domains</li>
+  </ul>
+
+  <h2>Data Deletion</h2>
+  <p>
+    You can delete all locally stored data at any time by:
+  </p>
+  <ul>
+    <li>Clicking <strong>重置 (Reset)</strong> in the extension popup to clear usage statistics</li>
+    <li>Clicking the clear (✕) buttons to remove uploaded media</li>
+    <li>Uninstalling the extension, which removes all associated local storage</li>
+  </ul>
+
+  <h2>Children's Privacy</h2>
+  <p>This extension is not directed at children under 13 and does not knowingly collect any information from children.</p>
+
+  <h2>Changes to This Policy</h2>
+  <p>If this policy is updated, the "Last updated" date above will be changed. Continued use of the extension constitutes acceptance of the updated policy.</p>
+
+  <h2>Contact</h2>
+  <p>Questions? Open an issue at
+    <a href="https://github.com/Beltran12138/gf-gatekeeper-desktop/issues">github.com/Beltran12138/gf-gatekeeper-desktop/issues</a>
+  </p>
+</body>
+</html>

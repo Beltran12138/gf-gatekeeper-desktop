@@ -50,7 +50,9 @@
   }
 
   async function showOverlay({ host, breakMinutes, photoB64, message, callerName, hasVideo, hasBgm, animeMode }) {
-    // Re-detect from actual image data so existing saved PNGs work without re-upload
+    if (overlayEl) return;
+    overlayEl = true; // sentinel: block re-entry during async gap before wrap is assigned
+
     const { cfg } = await chrome.storage.local.get('cfg').catch(() => ({ cfg: null }));
     const photo = cfg?.photoB64 ?? photoB64;
     const effectiveAnime = !hasVideo && (animeMode || await detectAlpha(photo));
@@ -69,8 +71,10 @@
 
     if (effectiveAnime) {
       await buildAnimeUI(wrap, host, breakMinutes, message, photo, hasBgm, cfg);
-    } else {
+    } else if (hasVideo) {
       await buildRealUI(wrap, host, breakMinutes, message, callerName ?? '宝贝', photoB64, hasVideo, hasBgm);
+    } else {
+      await buildPhotoUI(wrap, host, breakMinutes, message, callerName ?? '宝贝', photo, hasBgm, cfg);
     }
 
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -103,7 +107,131 @@
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // MODE B — Anime / animal: floating character + speech bubble
+  // MODE B — Photo / GIF: love-notification lock-screen style
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async function buildPhotoUI(wrap, host, breakMinutes, message, callerName, photo, hasBgm, cfg) {
+    // Blurred full-screen background
+    const bgEl = document.createElement('div');
+    bgEl.className = 'gfgk-photo-bg';
+    if (photo && photo.startsWith('data:image/')) {
+      bgEl.style.backgroundImage = `url("${photo}")`;
+    }
+    wrap.appendChild(bgEl);
+
+    // Dark overlay for readability
+    const overlay = document.createElement('div');
+    overlay.className = 'gfgk-photo-overlay';
+    wrap.appendChild(overlay);
+
+    if (hasBgm) await loadBgmOnly(cfg);
+
+    // Center content
+    const center = document.createElement('div');
+    center.className = 'gfgk-photo-center';
+
+    // Circular avatar with pulse ring
+    const avatarWrap = document.createElement('div');
+    avatarWrap.className = 'gfgk-avatar-wrap';
+
+    const ring = document.createElement('div');
+    ring.className = 'gfgk-avatar-ring';
+    avatarWrap.appendChild(ring);
+
+    if (photo) {
+      const avatar = document.createElement('img');
+      avatar.className = 'gfgk-avatar';
+      avatar.src = photo;
+      avatarWrap.appendChild(avatar);
+    } else {
+      const em = document.createElement('div');
+      em.className = 'gfgk-avatar-emoji';
+      em.textContent = '❤️';
+      avatarWrap.appendChild(em);
+    }
+    center.appendChild(avatarWrap);
+
+    // Caller name
+    const nameEl = document.createElement('div');
+    nameEl.className = 'gfgk-photo-name';
+    nameEl.textContent = callerName;
+    center.appendChild(nameEl);
+
+    // Subtitle: "想你了" style hint
+    const hintEl = document.createElement('div');
+    hintEl.className = 'gfgk-photo-hint';
+    hintEl.textContent = '❤️ 给你发来了提醒';
+    center.appendChild(hintEl);
+
+    // Message card
+    const msgCard = document.createElement('div');
+    msgCard.className = 'gfgk-photo-msg';
+    msgCard.textContent = message ?? '宝贝说：该休息了 ❤️';
+    center.appendChild(msgCard);
+
+    wrap.appendChild(center);
+
+    // Bottom bar: countdown + actions
+    const bottom = document.createElement('div');
+    bottom.className = 'gfgk-photo-bottom';
+
+    const cdWrap = document.createElement('div');
+    cdWrap.className = 'gfgk-cd-wrap';
+
+    const cdHint = document.createElement('div');
+    cdHint.className = 'gfgk-cd-hint';
+    cdHint.textContent = `休息 ${breakMinutes} 分钟后恢复`;
+    cdWrap.appendChild(cdHint);
+
+    let remaining = breakMinutes * 60;
+    const cdEl = document.createElement('div');
+    cdEl.className = 'gfgk-cd';
+    cdEl.textContent = fmt(remaining);
+    cdWrap.appendChild(cdEl);
+
+    if (countdownInterval) clearInterval(countdownInterval);
+    countdownInterval = setInterval(() => {
+      remaining--;
+      cdEl.textContent = fmt(remaining);
+      if (remaining <= 0) endBreak(host, breakMinutes);
+    }, 1000);
+
+    bottom.appendChild(cdWrap);
+
+    const actions = document.createElement('div');
+    actions.className = 'gfgk-actions';
+
+    // Mute
+    let muted = false;
+    const muteWrap = document.createElement('div');
+    muteWrap.className = 'gfgk-act-wrap';
+    const muteBtn = document.createElement('button');
+    muteBtn.className = 'gfgk-act-btn';
+    muteBtn.textContent = '🎤';
+    const muteLbl = document.createElement('span');
+    muteLbl.className = 'gfgk-act-lbl';
+    muteLbl.textContent = '静音';
+    muteBtn.onclick = () => {
+      muted = !muted;
+      if (bgmAudio) bgmAudio.muted = muted;
+      document.querySelectorAll('video, audio').forEach(el => { el.muted = muted; });
+      muteBtn.textContent = muted ? '🔇' : '🎤';
+      muteLbl.textContent = muted ? '已静音' : '静音';
+      muteBtn.style.background = muted ? 'rgba(255,80,80,0.35)' : '';
+    };
+    muteWrap.appendChild(muteBtn);
+    muteWrap.appendChild(muteLbl);
+    actions.appendChild(muteWrap);
+
+    actions.appendChild(makeActionBtn('📵', '去休息',   'gfgk-act-btn gfgk-end-btn', () => endBreak(host, breakMinutes)));
+    actions.appendChild(makeActionBtn('✕',  '紧急退出', 'gfgk-act-btn gfgk-esc-btn', removeOverlay));
+
+    bottom.appendChild(actions);
+    wrap.appendChild(bottom);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // MODE C — Anime / animal: floating character + speech bubble
   // ══════════════════════════════════════════════════════════════════════════
 
   async function buildAnimeUI(wrap, host, breakMinutes, message, photo, hasBgm, cfg) {
@@ -149,6 +277,7 @@
     cdEl.textContent = fmt(remaining);
     card.appendChild(cdEl);
 
+    if (countdownInterval) clearInterval(countdownInterval);
     countdownInterval = setInterval(() => {
       remaining--;
       cdEl.textContent = fmt(remaining);
@@ -271,6 +400,7 @@
     cdEl.textContent = fmt(remaining);
     cdWrap.appendChild(cdEl);
 
+    if (countdownInterval) clearInterval(countdownInterval);
     countdownInterval = setInterval(() => {
       remaining--;
       cdEl.textContent = fmt(remaining);
@@ -352,6 +482,9 @@
   }
 
   function createShadowHost() {
+    // Remove stale host from a previous re-injection to avoid duplicate listeners
+    const stale = document.getElementById('__gfgk_shadow_host__');
+    if (stale) stale.remove();
     const host = document.createElement('div');
     host.id = '__gfgk_shadow_host__';
     Object.assign(host.style, {
@@ -443,6 +576,83 @@
     }
     .gfgk-cd-wrap {
       display: flex; flex-direction: column; align-items: center; gap: 3px;
+    }
+
+    /* ══ PHOTO / GIF MODE ══ */
+
+    .gfgk-photo-bg {
+      position: absolute; inset: 0;
+      background-size: cover; background-position: center;
+      filter: blur(28px) brightness(0.45) saturate(1.2);
+      transform: scale(1.08);
+    }
+    .gfgk-photo-overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(
+        180deg,
+        rgba(0,0,0,0.30) 0%,
+        rgba(0,0,0,0.10) 40%,
+        rgba(0,0,0,0.55) 75%,
+        rgba(0,0,0,0.88) 100%
+      );
+    }
+    .gfgk-photo-center {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -54%);
+      display: flex; flex-direction: column; align-items: center; gap: 14px;
+      z-index: 5;
+    }
+    .gfgk-avatar-wrap {
+      position: relative; width: 160px; height: 160px;
+    }
+    .gfgk-avatar-ring {
+      position: absolute; inset: -8px; border-radius: 50%;
+      border: 3px solid rgba(255,107,157,0.75);
+      animation: gfgk-pulse-ring 2.2s ease-out infinite;
+      box-shadow: 0 0 0 0 rgba(255,107,157,0.55);
+    }
+    @keyframes gfgk-pulse-ring {
+      0%   { transform: scale(1);    opacity: 1; box-shadow: 0 0 0 0   rgba(255,107,157,0.55); }
+      70%  { transform: scale(1.12); opacity: 0.6; box-shadow: 0 0 0 18px rgba(255,107,157,0); }
+      100% { transform: scale(1);    opacity: 1; box-shadow: 0 0 0 0   rgba(255,107,157,0); }
+    }
+    .gfgk-avatar {
+      width: 160px; height: 160px; border-radius: 50%;
+      object-fit: cover; display: block;
+      border: 4px solid rgba(255,255,255,0.92);
+      box-shadow: 0 8px 48px rgba(0,0,0,0.65), 0 0 0 6px rgba(255,107,157,0.22);
+    }
+    .gfgk-avatar-emoji {
+      width: 160px; height: 160px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 80px;
+      background: rgba(255,255,255,0.10);
+      border: 4px solid rgba(255,255,255,0.5);
+    }
+    .gfgk-photo-name {
+      font-size: 24px; font-weight: 700; color: #fff;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.7);
+      letter-spacing: 0.02em;
+    }
+    .gfgk-photo-hint {
+      font-size: 13px; color: rgba(255,255,255,0.55);
+      letter-spacing: 0.04em;
+    }
+    .gfgk-photo-msg {
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.18);
+      backdrop-filter: blur(16px);
+      border-radius: 18px;
+      padding: 12px 26px;
+      font-size: 16px; font-weight: 500; color: #fff;
+      text-align: center; max-width: 72vw;
+      text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+    }
+    .gfgk-photo-bottom {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 0 0 38px; gap: 18px; z-index: 10;
     }
 
     /* ══ ANIME / ANIMAL MODE ══ */

@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Girlfriend Gatekeeper",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "刷社交媒体超时，女友照片/视频全屏提醒你休息。Girlfriend appears when you doom-scroll too long.",
 
-  "permissions": ["storage", "alarms", "tabs", "activeTab", "scripting", "unlimitedStorage"],
+  "permissions": ["storage", "alarms", "tabs", "activeTab", "scripting", "unlimitedStorage", "notifications"],
   "host_permissions": ["<all_urls>"],
 
   "background": {

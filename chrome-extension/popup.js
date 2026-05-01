@@ -41,7 +41,17 @@ function hasAlphaChannel(dataUrl) {
 // ── load saved state ──────────────────────────────────────────────────────────
 
 async function load() {
-  const { cfg, timeMap } = await chrome.storage.local.get(['cfg', 'timeMap']);
+  const { cfg, statsDate } = await chrome.storage.local.get(['cfg', 'statsDate']);
+
+  // Auto-reset daily — "今日统计" should reflect today only
+  const today = new Date().toDateString();
+  let timeMap = {};
+  if (statsDate !== today) {
+    await chrome.storage.local.set({ timeMap: {}, statsDate: today });
+  } else {
+    ({ timeMap } = await chrome.storage.local.get('timeMap'));
+    timeMap = timeMap ?? {};
+  }
 
   document.getElementById('limitMin').value   = cfg?.limitMinutes ?? 15;
   document.getElementById('breakMin').value   = cfg?.breakMinutes ?? 5;
@@ -52,7 +62,7 @@ async function load() {
   if (cfg?.mediaMeta) restoreMediaLabel(cfg.mediaMeta, cfg);
   if (cfg?.bgmMeta)   restoreBgmLabel(cfg.bgmMeta);
 
-  renderStats(timeMap ?? {});
+  renderStats(timeMap);
 }
 
 function restoreMediaLabel(meta, cfg) {
@@ -193,10 +203,21 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
 
 // ── reset / test ──────────────────────────────────────────────────────────────
 
-document.getElementById('resetBtn').addEventListener('click', async () => {
-  await chrome.storage.local.set({ timeMap: {}, breaks: {} });
-  chrome.runtime.sendMessage({ type: 'reset_all' });
-  renderStats({});
+const resetBtn = document.getElementById('resetBtn');
+resetBtn.addEventListener('click', () => {
+  if (resetBtn.dataset.confirm === '1') {
+    chrome.runtime.sendMessage({ type: 'reset_all' });
+    renderStats({});
+    resetBtn.textContent = '重置';
+    delete resetBtn.dataset.confirm;
+  } else {
+    resetBtn.textContent = '确认重置？';
+    resetBtn.dataset.confirm = '1';
+    setTimeout(() => {
+      resetBtn.textContent = '重置';
+      delete resetBtn.dataset.confirm;
+    }, 3000);
+  }
 });
 
 document.getElementById('testBtn').addEventListener('click', () => {
