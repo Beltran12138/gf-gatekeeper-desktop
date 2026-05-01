@@ -27,7 +27,34 @@
 
   // ── build overlay ─────────────────────────────────────────────────────────
 
+  // Detect transparent PNG at display time — works even if animeMode flag not saved
+  function detectAlpha(dataUrl) {
+    return new Promise(res => {
+      if (!dataUrl || !dataUrl.startsWith('data:image/png')) { res(false); return; }
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const cv = document.createElement('canvas');
+          cv.width = Math.min(img.width, 64); cv.height = Math.min(img.height, 64);
+          const ctx = cv.getContext('2d');
+          ctx.drawImage(img, 0, 0, cv.width, cv.height);
+          const px = ctx.getImageData(0, 0, cv.width, cv.height).data;
+          let t = 0;
+          for (let i = 3; i < px.length; i += 4) if (px[i] < 200) t++;
+          res(t > cv.width * cv.height * 0.05);
+        } catch (_) { res(false); }
+      };
+      img.onerror = () => res(false);
+      img.src = dataUrl;
+    });
+  }
+
   async function showOverlay({ host, breakMinutes, photoB64, message, callerName, hasVideo, hasBgm, animeMode }) {
+    // Re-detect from actual image data so existing saved PNGs work without re-upload
+    const { cfg } = await chrome.storage.local.get('cfg').catch(() => ({ cfg: null }));
+    const photo = cfg?.photoB64 ?? photoB64;
+    const effectiveAnime = !hasVideo && (animeMode || await detectAlpha(photo));
+
     const shadow = createShadowHost();
     const root   = shadow.shadowRoot;
 
@@ -40,8 +67,8 @@
     root.appendChild(wrap);
     overlayEl = wrap;
 
-    if (animeMode) {
-      await buildAnimeUI(wrap, host, breakMinutes, message, photoB64, hasBgm);
+    if (effectiveAnime) {
+      await buildAnimeUI(wrap, host, breakMinutes, message, photo, hasBgm, cfg);
     } else {
       await buildRealUI(wrap, host, breakMinutes, message, callerName ?? '宝贝', photoB64, hasVideo, hasBgm);
     }
@@ -79,20 +106,16 @@
   // MODE B — Anime / animal: floating character + speech bubble
   // ══════════════════════════════════════════════════════════════════════════
 
-  async function buildAnimeUI(wrap, host, breakMinutes, message, photoB64, hasBgm) {
+  async function buildAnimeUI(wrap, host, breakMinutes, message, photo, hasBgm, cfg) {
     wrap.classList.add('gfgk-anime');
 
-    // Dark radial background
     const bg = document.createElement('div');
     bg.className = 'gfgk-anime-bg';
     wrap.appendChild(bg);
 
-    // Load BGM if any
-    if (hasBgm) await loadBgmOnly();
+    if (hasBgm) await loadBgmOnly(cfg);
 
-    // Character image
-    const { cfg } = await chrome.storage.local.get('cfg').catch(() => ({ cfg: null }));
-    const src = cfg?.photoB64 ?? photoB64;
+    const src = photo;
     if (src) {
       const char = document.createElement('img');
       char.className = 'gfgk-char';
