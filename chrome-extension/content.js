@@ -307,7 +307,18 @@
       videoEl = document.createElement('video');
       videoEl.className = 'gfgk-media';
       videoEl.autoplay = true; videoEl.loop = true; videoEl.playsInline = true;
-      videoEl.src = cfg.videoDataUrl;
+      videoEl.muted = true; // required for autoplay policy; mute btn can toggle later
+
+      // Convert data URL → Blob URL: avoids Chrome's large-src silent failure
+      try {
+        const blob = await fetch(cfg.videoDataUrl).then(r => r.blob());
+        const objUrl = URL.createObjectURL(blob);
+        objectURLs.push(objUrl);
+        videoEl.src = objUrl;
+      } catch (_) {
+        videoEl.src = cfg.videoDataUrl; // fallback
+      }
+
       container.appendChild(videoEl);
       videoEl.play().catch(() => {});
       return;
@@ -412,16 +423,17 @@
     const actions = document.createElement('div');
     actions.className = 'gfgk-actions';
 
-    // Mute button — toggles overlay media + all page audio/video
-    let muted = false;
+    // Mute button — video starts muted for autoplay; button reflects real state
+    let muted = videoEl ? videoEl.muted : false;
     const muteWrap = document.createElement('div');
     muteWrap.className = 'gfgk-act-wrap';
     const muteBtn = document.createElement('button');
     muteBtn.className = 'gfgk-act-btn';
-    muteBtn.textContent = '🎤';
+    muteBtn.textContent = muted ? '🔇' : '🎤';
+    if (muted) muteBtn.style.background = 'rgba(255,80,80,0.35)';
     const muteLbl = document.createElement('span');
     muteLbl.className = 'gfgk-act-lbl';
-    muteLbl.textContent = '静音';
+    muteLbl.textContent = muted ? '已静音' : '静音';
     muteBtn.onclick = () => {
       muted = !muted;
       if (videoEl)  videoEl.muted  = muted;
