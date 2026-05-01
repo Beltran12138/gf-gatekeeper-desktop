@@ -307,18 +307,42 @@
   async function loadMedia(container, photoB64, hasVideo, hasBgm) {
     if (hasVideo) {
       // Video stored under its own key — avoids deserializing large data from cfg
-      const { gfgk_videoUrl } = await chrome.storage.local.get('gfgk_videoUrl').catch(() => ({}));
+      const result = await chrome.storage.local.get('gfgk_videoUrl').catch(e => {
+        console.error('[GFGK] storage.get gfgk_videoUrl failed:', e);
+        return {};
+      });
+      const gfgk_videoUrl = result.gfgk_videoUrl;
+      console.log('[GFGK] loadMedia hasVideo=true, gfgk_videoUrl length:', gfgk_videoUrl ? gfgk_videoUrl.length : 'null/undefined');
       if (gfgk_videoUrl) {
         videoEl = document.createElement('video');
         videoEl.className = 'gfgk-media';
-        videoEl.autoplay = true; videoEl.loop = true; videoEl.playsInline = true;
-        videoEl.src = gfgk_videoUrl;
-        videoEl.load();
+        videoEl.loop = true; videoEl.playsInline = true;
+
+        // Convert data URL → Blob URL: Chrome handles large media blobs
+        // more reliably than 50 MB+ data URLs set directly on src.
+        // Also avoids AbortError from calling load() then play() on a data URL.
+        try {
+          const resp = await fetch(gfgk_videoUrl);
+          const blob = await resp.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          objectURLs.push(blobUrl);
+          videoEl.src = blobUrl;
+        } catch (_) {
+          videoEl.src = gfgk_videoUrl; // fallback: direct data URL
+        }
+
         container.appendChild(videoEl);
-        videoEl.play().catch(() => {});
+
+        // Play with sound; if autoplay policy blocks it, retry muted
+        videoEl.play().catch(() => {
+          videoEl.muted = true;
+          videoEl.play().catch(() => {});
+        });
+
         if (hasBgm) await loadBgmOnly();
         return;
       }
+      console.warn('[GFGK] hasVideo=true but gfgk_videoUrl is empty — falling through to photo/emoji');
     }
 
     const { cfg } = await chrome.storage.local.get('cfg').catch(() => ({ cfg: null }));

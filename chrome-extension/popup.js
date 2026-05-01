@@ -107,14 +107,47 @@ function renderStats(timeMap) {
 
 // ── media upload ──────────────────────────────────────────────────────────────
 
+// Tracks in-progress storage write so testBtn can wait before sending the message
+let _pendingWrite = Promise.resolve();
+
 document.getElementById('mediaInput').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const isVideo = file.type.startsWith('video/');
 
-  // Read as data URL — accessible from both popup and content scripts
-  const dataUrl = await fileToDataUrl(file);
+  document.getElementById('mediaName').textContent = file.name;
+  document.getElementById('mediaSize').textContent = fmtBytes(file.size);
 
+  const dataUrl = await fileToDataUrl(file);
+  const isAnime = !isVideo && await hasAlphaChannel(dataUrl);
+
+  // Write storage FIRST — thumbnail appears only after writes are confirmed.
+  // This prevents a race where the user clicks Test before cfg.hasVideo is saved.
+  _pendingWrite = (async () => {
+    try {
+      const { cfg } = await chrome.storage.local.get('cfg');
+      if (isVideo) {
+        await chrome.storage.local.set({ gfgk_videoUrl: dataUrl });
+      } else {
+        await chrome.storage.local.remove('gfgk_videoUrl');
+      }
+      await chrome.storage.local.set({
+        cfg: {
+          ...(cfg ?? {}),
+          hasVideo:  isVideo,
+          animeMode: isAnime,
+          photoB64:  isVideo ? null : dataUrl,
+          mediaMeta: { name: file.name, size: file.size, type: file.type },
+        }
+      });
+    } catch (err) {
+      console.error('[GFGK] media storage write failed:', err);
+    }
+  })();
+
+  await _pendingWrite;
+
+  // Show thumbnail only after storage is confirmed written
   if (isVideo) {
     const vid = document.getElementById('mediaThumbVid');
     vid.src = dataUrl; vid.classList.add('show');
@@ -126,29 +159,6 @@ document.getElementById('mediaInput').addEventListener('change', async (e) => {
     document.getElementById('mediaThumbVid').classList.remove('show');
   }
 
-  document.getElementById('mediaName').textContent = file.name;
-  document.getElementById('mediaSize').textContent = fmtBytes(file.size);
-
-  const isAnime = !isVideo && await hasAlphaChannel(dataUrl);
-
-  const { cfg } = await chrome.storage.local.get('cfg');
-  // Store video under a separate key to keep cfg small and readable
-  if (isVideo) {
-    await chrome.storage.local.set({ gfgk_videoUrl: dataUrl });
-  } else {
-    await chrome.storage.local.remove('gfgk_videoUrl');
-  }
-  await chrome.storage.local.set({
-    cfg: {
-      ...(cfg ?? {}),
-      hasVideo:  isVideo,
-      animeMode: isAnime,
-      photoB64:  isVideo ? null : dataUrl,
-      mediaMeta: { name: file.name, size: file.size, type: file.type },
-    }
-  });
-
-  // Show anime mode badge if detected
   const badge = document.getElementById('animeBadge');
   if (badge) badge.style.display = isAnime ? 'inline' : 'none';
 });
@@ -233,7 +243,9 @@ resetBtn.addEventListener('click', () => {
   }
 });
 
-document.getElementById('testBtn').addEventListener('click', () => {
+document.getElementById('testBtn').addEventListener('click', async () => {
+  // Wait for any in-progress media write before triggering the overlay
+  await _pendingWrite;
   chrome.runtime.sendMessage({ type: 'test_overlay' });
   window.close();
 });
