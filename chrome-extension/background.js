@@ -75,13 +75,15 @@ async function checkAndTrigger(host, totalSeconds) {
   if (breaks?.[host] && breaks[host] > Date.now()) return;
 
   const payload = {
-    type: 'show_overlay',
+    type:        'show_overlay',
     host,
     breakMinutes: cfg.breakMinutes,
-    photoB64:     cfg.photoB64  ?? null,
+    photoB64:     cfg.photoB64   ?? null,
     message:      cfg.message,
-    hasVideo:     cfg.hasVideo  ?? false,
+    callerName:   cfg.callerName ?? '宝贝',
+    hasVideo:     cfg.hasVideo   ?? false,
     hasBgm:       cfg.hasBgm    ?? false,
+    animeMode:    cfg.animeMode  ?? false,
   };
 
   // Send to ALL tracked tabs; re-inject if content script is orphaned
@@ -176,13 +178,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       const url = tab?.url ?? '';
       if (tab && (url.startsWith('http://') || url.startsWith('https://'))) {
         const payload = {
-          type: 'show_overlay',
-          host: 'test',
+          type:        'show_overlay',
+          host:        'test',
           breakMinutes: cfg.breakMinutes,
-          photoB64:     cfg.photoB64 ?? null,
+          photoB64:     cfg.photoB64   ?? null,
           message:      cfg.message,
-          hasVideo:     cfg.hasVideo ?? false,
-          hasBgm:       cfg.hasBgm   ?? false,
+          callerName:   cfg.callerName ?? '宝贝',
+          hasVideo:     cfg.hasVideo   ?? false,
+          hasBgm:       cfg.hasBgm    ?? false,
+          animeMode:    cfg.animeMode  ?? false,
         };
         try {
           await chrome.tabs.sendMessage(tab.id, payload);

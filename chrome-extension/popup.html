@@ -117,7 +117,9 @@
       <video class="media-thumb-video" id="mediaThumbVid" muted loop playsinline></video>
       <div class="media-info">
         <div class="media-name" id="mediaName">未上传</div>
-        <div class="media-size" id="mediaSize"></div>
+        <div class="media-size" id="mediaSize">
+          <span id="animeBadge" class="media-type-badge badge-video" style="display:none">✨ 动漫</span>
+        </div>
       </div>
       <label class="upload-btn" for="mediaInput" title="上传照片/GIF/视频">
         📸
@@ -144,6 +146,12 @@
   </div>
 
   <hr>
+
+  <!-- Caller name -->
+  <div class="section">
+    <label class="lbl">来电显示名称</label>
+    <input type="text" id="callerName" placeholder="宝贝" style="width:100%">
+  </div>
 
   <!-- Message -->
   <div class="section">

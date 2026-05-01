@@ -18,15 +18,36 @@ function fileToDataUrl(file) {
   });
 }
 
+// Returns true if the PNG data URL contains meaningful alpha transparency
+function hasAlphaChannel(dataUrl) {
+  return new Promise(res => {
+    if (!dataUrl.startsWith('data:image/png')) { res(false); return; }
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement('canvas');
+      cv.width = Math.min(img.width, 64); cv.height = Math.min(img.height, 64);
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      const data = ctx.getImageData(0, 0, cv.width, cv.height).data;
+      let transparent = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i] < 200) transparent++;
+      res(transparent > (cv.width * cv.height * 0.05)); // >5% transparent pixels
+    };
+    img.onerror = () => res(false);
+    img.src = dataUrl;
+  });
+}
+
 // ── load saved state ──────────────────────────────────────────────────────────
 
 async function load() {
   const { cfg, timeMap } = await chrome.storage.local.get(['cfg', 'timeMap']);
 
-  document.getElementById('limitMin').value = cfg?.limitMinutes ?? 15;
-  document.getElementById('breakMin').value = cfg?.breakMinutes ?? 5;
-  document.getElementById('message').value  = cfg?.message ?? '';
-  document.getElementById('sites').value    = (cfg?.trackedSites ?? []).join('\n') || DEFAULT_SITES;
+  document.getElementById('limitMin').value   = cfg?.limitMinutes ?? 15;
+  document.getElementById('breakMin').value   = cfg?.breakMinutes ?? 5;
+  document.getElementById('callerName').value = cfg?.callerName  ?? '';
+  document.getElementById('message').value    = cfg?.message ?? '';
+  document.getElementById('sites').value      = (cfg?.trackedSites ?? []).join('\n') || DEFAULT_SITES;
 
   if (cfg?.mediaMeta) restoreMediaLabel(cfg.mediaMeta, cfg);
   if (cfg?.bgmMeta)   restoreBgmLabel(cfg.bgmMeta);
@@ -94,16 +115,23 @@ document.getElementById('mediaInput').addEventListener('change', async (e) => {
   document.getElementById('mediaName').textContent = file.name;
   document.getElementById('mediaSize').textContent = fmtBytes(file.size);
 
+  const isAnime = !isVideo && await hasAlphaChannel(dataUrl);
+
   const { cfg } = await chrome.storage.local.get('cfg');
   await chrome.storage.local.set({
     cfg: {
       ...(cfg ?? {}),
       hasVideo:     isVideo,
+      animeMode:    isAnime,
       videoDataUrl: isVideo ? dataUrl : null,
       photoB64:     isVideo ? null    : dataUrl,
       mediaMeta: { name: file.name, size: file.size, type: file.type },
     }
   });
+
+  // Show anime mode badge if detected
+  const badge = document.getElementById('animeBadge');
+  if (badge) badge.style.display = isAnime ? 'inline' : 'none';
 });
 
 document.getElementById('mediaClear').addEventListener('click', async () => {
@@ -153,6 +181,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     ...(existing ?? {}),
     limitMinutes: parseInt(document.getElementById('limitMin').value) || 15,
     breakMinutes: parseInt(document.getElementById('breakMin').value) || 5,
+    callerName:   document.getElementById('callerName').value.trim() || '宝贝',
     message:      document.getElementById('message').value || '宝贝说：该休息了 ❤️',
     trackedSites: sites,
   };
