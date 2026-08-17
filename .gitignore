@@ -54,3 +54,6 @@ desktop.ini
 
 # Temp audio (ffmpeg extraction)
 tmp*.wav
+
+# Extension build artifacts (attach to Releases instead)
+gf-gatekeeper-v*.zip

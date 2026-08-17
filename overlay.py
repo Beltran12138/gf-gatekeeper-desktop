@@ -16,6 +16,13 @@ import threading
 import tkinter as tk
 from PIL import Image, ImageTk, ImageDraw
 
+import config
+
+# Emotion-beat timing (ms): happy flashes on "go rest", then settles to waiting;
+# bye lingers briefly at natural countdown end before the overlay closes.
+HAPPY_HOLD_MS = 1600
+BYE_HOLD_MS   = 1300
+
 BG      = '#0a0a0f'
 WHITE   = '#ffffff'
 GRAY    = '#888888'
@@ -175,8 +182,14 @@ class GatekeeperOverlay:
 
         self.win              = None
         self.canvas           = None
-        self.media_items: list[MediaItem] = []
+        self.media_items: list[MediaItem] = []   # items for the CURRENT emotion
         self.media_idx        = 0
+        # Emotion packs
+        self.pack             = None             # active_pack(config) result
+        self._circle          = True
+        self._current_emotion = None
+        self._emotion_cache: dict[str, list] = {}     # emotion → [MediaItem]
+        self._item_by_path: dict[str, MediaItem] = {}  # path → MediaItem (shared)
         self._tk_ref          = None
         self.photo_id         = None
         self.cd_id            = None
@@ -319,23 +332,65 @@ class GatekeeperOverlay:
     # ── media loading ─────────────────────────────────────────────────────────
 
     def _load_media(self):
-        ml = self.config.get('media_list', [])
-        if not ml:
-            p = self.config.get('photo_path', '')
-            if p:
-                ml = [p]
+        # Resolve the active emotion pack (falls back to a synthesized pack from
+        # the legacy media_list/photo_path, so old configs keep working).
+        self.pack = config.active_pack(self.config)
         videocall = self.config.get('videocall_ui', False)
         self._base_photo_size = 260 if videocall else 220
-        circle = (not videocall) and \
-                 (self.config.get('photo_style', 'circle') == 'circle')
-        for path in ml:
-            if os.path.exists(path):
-                item = MediaItem(path,
-                                 base_size=self._base_photo_size,
-                                 circle=circle)
-                if item.ok():
-                    self.media_items.append(item)
+        style = self.pack.get('style') if self.pack \
+            else self.config.get('photo_style', 'circle')
+        self._circle = (not videocall) and (style == 'circle')
+        # Entrance shows the base 'nag' emotion; others load lazily on switch.
+        self.media_items = self._emotion_items(config.BASE_EMOTION)
+        self._current_emotion = config.BASE_EMOTION
         self._loaded = True
+
+    def _emotion_items(self, name: str) -> list:
+        """MediaItems for an emotion, with a per-path cache so a fallback that
+        reuses `nag`'s image reuses the same decoded MediaItem (no reload)."""
+        if name in self._emotion_cache:
+            return self._emotion_cache[name]
+        items = []
+        for path in config.pack_emotion(self.pack, name):
+            item = self._item_by_path.get(path)
+            if item is None:
+                if not os.path.exists(path):
+                    continue
+                item = MediaItem(path, base_size=self._base_photo_size,
+                                 circle=self._circle)
+                if not item.ok():
+                    continue
+                self._item_by_path[path] = item
+            items.append(item)
+        self._emotion_cache[name] = items
+        return items
+
+    def _set_emotion(self, name: str):
+        """Swap the displayed media to another emotion (soft swap, no spring).
+
+        Keeps current media if the emotion resolves to nothing or to the same
+        set, so the overlay never blanks. BGM is left alone unless the new item
+        carries its own (video) audio — avoids restarting the track on a switch.
+        """
+        if not self.win:
+            return
+        items = self._emotion_items(name)
+        if not items or items is self.media_items:
+            return
+        self._current_emotion = name
+        for j in (self._anim_job, self._switch_job):
+            if j:
+                try: self.win.after_cancel(j)
+                except Exception: pass
+        self._anim_job = self._switch_job = None
+        self.media_items = items
+        self.media_idx = 0
+        if items[0].audio_path:
+            self._play_item_audio(items[0])
+        self._do_animate()
+        if len(items) > 1:
+            secs = self.config.get('media_switch_seconds', 8)
+            self._switch_job = self.win.after(secs * 1000, self._next_media)
 
     def _poll_loaded(self):
         if not self._loaded:
@@ -707,6 +762,10 @@ class GatekeeperOverlay:
                         bg='#333333', activebackground='#333333')
         if self.sub_id:
             self.canvas.itemconfig(self.sub_id, text='好好休息  ❤️')
+        # Emotion beat: happy that you agreed, then settle into impatient waiting.
+        self._set_emotion('happy')
+        if self.win:
+            self.win.after(HAPPY_HOLD_MS, lambda: self._set_emotion('waiting'))
         self.on_break_start(self.key)
         self._tick()
 
@@ -728,8 +787,19 @@ class GatekeeperOverlay:
             self.countdown_val -= 1
             self._cd_job = self.win.after(1000, self._tick)
         else:
-            self.hide()
-            self.on_break_end()
+            self._finish()
+
+    def _finish(self):
+        """Natural countdown end: wave goodbye briefly, then close."""
+        self._set_emotion('bye')
+        if self.win:
+            self.win.after(BYE_HOLD_MS, self._close_done)
+        else:
+            self._close_done()
+
+    def _close_done(self):
+        self.hide()
+        self.on_break_end()
 
     @staticmethod
     def _fmt(s: int) -> str:
